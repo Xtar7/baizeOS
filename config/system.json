@@ -1,0 +1,6 @@
+{
+  "ocr_confidence_threshold": 0.85,
+  "default_llm_model": "qwen2.5-7b-q4",
+  "ocr_assistant_model": "ocr-assistant-3b-q4",
+  "knowledge_base_path": "./knowledge_base"
+}

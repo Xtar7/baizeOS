@@ -1,0 +1,9 @@
+{
+  "type": "assistant",
+  "backend": "ollama",
+  "language": ["zh"],
+  "context_length": 4096,
+  "capabilities": ["qa"],
+  "system_prompt_ref": ["system_identity", "ocr_assistant"]
+
+}

@@ -1,0 +1,25 @@
+{
+  "doc_id": "img_001",
+  "source_file": "raw_files/images/img_001.png",
+  "versions": [
+    {
+      "version": 1,
+      "timestamp": "2026-01-21T10:20:00",
+      "action": "ocr",
+      "engine": "PaddleOCR",
+      "avg_confidence": 0.78
+    },
+    {
+      "version": 2,
+      "timestamp": "2026-01-21T10:35:12",
+      "action": "manual_correction",
+      "changes": [
+        {
+          "line": 3,
+          "original": "河流千支",
+          "modified": "河流千支（支流）"
+        }
+      ]
+    }
+  ]
+}
