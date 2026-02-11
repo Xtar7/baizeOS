@@ -1,0 +1,17 @@
+{
+  "doc_id": "img_001",
+  "title": "某某水文古籍",
+  "source": "img_001.png",
+  "sections": [
+    {
+      "section_id": "s1",
+      "text": "……",
+      "page": 1
+    },
+    {
+      "section_id": "s2",
+      "text": "……",
+      "page": 1
+    }
+  ]
+}

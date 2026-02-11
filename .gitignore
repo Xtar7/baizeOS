@@ -35,6 +35,8 @@ MANIFEST
 # Installer logs
 pip-log.txt
 pip-delete-this-directory.txt
+struture.py
+文件结构.md
 
 # Unit test / coverage reports
 htmlcov/
@@ -173,7 +175,7 @@ cython_debug/
 #  be found at https://github.com/github/gitignore/blob/main/Global/JetBrains.gitignore
 #  and can be added to the global gitignore or merged into this file.  For a more nuclear
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
-#.idea/
+.idea/
 
 # Abstra
 # Abstra is an AI-powered process automation framework.
@@ -193,6 +195,9 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+# GGUF model files
+*.gguf
 
 # Cursor
 #  Cursor is an AI-powered code editor. `.cursorignore` specifies files/directories to

@@ -1,0 +1,57 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Local Chat LLM Schema",
+  "type": "object",
+  "required": [
+    "id",
+    "name",
+    "backend",
+    "format",
+    "context_length",
+    "capabilities"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "模型唯一ID"
+    },
+    "name": {
+      "type": "string"
+    },
+    "backend": {
+      "type": "string",
+      "enum": ["llama.cpp", "vllm"]
+    },
+    "format": {
+      "type": "string",
+      "enum": ["gguf", "safetensors"]
+    },
+    "quantization": {
+      "type": "string"
+    },
+    "context_length": {
+      "type": "integer",
+      "minimum": 2048
+    },
+    "language": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "capabilities": {
+      "type": "object",
+      "required": ["chat", "rag"],
+      "properties": {
+        "chat": { "type": "boolean" },
+        "rag": { "type": "boolean" },
+        "vision": { "type": "boolean" }
+      }
+    },
+    "recommended": {
+      "type": "object",
+      "properties": {
+        "temperature": { "type": "number" },
+        "max_tokens": { "type": "integer" }
+      }
+    }
+  }
+}

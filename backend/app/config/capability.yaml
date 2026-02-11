@@ -1,0 +1,38 @@
+system:
+  name: 白泽智能
+  vendor: xtar
+  version: 0.1.0
+
+chat:
+  enabled: true
+  fallback_answer: |
+    不好意思，从已有的资料中无法得出答案，
+    我还需要学习更多内容。
+
+knowledge_base:
+  enabled: true
+  multi_kb: true
+
+models:
+  llm:
+    auto_discover: true
+    hot_switch: true
+
+  embedding:
+    enabled: true
+    auto_discover: true
+    supported_types:
+      - gguf
+      - huggingface
+
+rag:
+  enabled: true
+  chunk:
+    size: 800
+    overlap: 150
+
+upload:
+  enabled: true
+  formats:
+    - txt
+    - md

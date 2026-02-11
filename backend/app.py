@@ -1,12 +1,26 @@
-from flask import Flask
+# backend/app.py
+import sys
+from pathlib import Path
 
-app = Flask(__name__)
+project_root = Path(__file__).resolve().parent
+sys.path.insert(0, str(project_root))
 
+# ------------------------------
+from app import create_app   # 注意这里还是 from app import ...
 
-@app.route('/')
-def hello_world():  # put application's code here
-    return 'Hello World!'
+app = create_app()
 
+if __name__ == "__main__":
+    # print("=================================")
+    # print(" BaizeOS Backend Starting")
+    # print(f" Host: 0.0.0.0")
+    # print(f" Port: 5000")
+    # print(f" Debug: True (可手动改成 False)")
+    # print("=================================")
 
-if __name__ == '__main__':
-    app.run()
+    app.run(
+        host="0.0.0.0",
+        port=5000,
+        debug=True,          # ← 你想要随时改 debug 就直接在这里改这一行
+        use_reloader=True,
+    )

@@ -1,9 +1,0 @@
-{
-  "model_id": "ocr-assistant-3b-q4",
-  "display_name": "OCR 校正模型（3B 量化）",
-  "type": "assistant",
-  "backend": "ollama",
-  "capabilities": ["ocr_review"],
-  "language": ["zh"],
-  "context_length": 4096
-}
