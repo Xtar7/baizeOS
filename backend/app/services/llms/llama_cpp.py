@@ -1,5 +1,5 @@
-# app/services/llms/llama_cpp.py
 from pathlib import Path
+from typing import List, Dict, Generator, Union
 from llama_cpp import Llama
 
 from app.services.llms.base import BaseLLM
@@ -20,11 +20,48 @@ class LlamaCppLLM(BaseLLM):
             n_threads=8,
         )
 
-    def chat(self, message: str) -> str:
+    # ----------------------------
+    # prompt 构造
+    # ----------------------------
+    def build_prompt(self, messages: List[Dict], system_prompt: str) -> str:
+        prompt = f"System: {system_prompt}\n"
+
+        for msg in messages:
+            role = msg["role"]
+            content = msg["content"]
+
+            if role == "user":
+                prompt += f"User: {content}\n"
+            elif role == "assistant":
+                prompt += f"Assistant: {content}\n"
+
+        prompt += "Assistant:"
+        return prompt
+
+    # ----------------------------
+    # 对话接口
+    # ----------------------------
+    def chat(
+        self,
+        messages: List[Dict],
+        system_prompt: str,
+        stream: bool = False
+    ) -> Union[str, Generator[str, None, None]]:
+
+        prompt = self.build_prompt(messages, system_prompt)
+
         output = self.llm(
-            message,
+            prompt,
             max_tokens=512,
-            stop=["</s>"],
+            stream=stream,
+            stop=["User:", "Assistant:"]
         )
 
-        return output["choices"][0]["text"].strip()
+        if not stream:
+            return output["choices"][0]["text"].strip()
+
+        def token_generator():
+            for chunk in output:
+                yield chunk["choices"][0]["text"]
+
+        return token_generator()

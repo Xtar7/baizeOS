@@ -1,6 +1,6 @@
-# app/services/llms/base.py
 from abc import ABC, abstractmethod
 from pathlib import Path
+from typing import List, Dict, Generator, Union
 
 
 class BaseLLM(ABC):
@@ -19,15 +19,16 @@ class BaseLLM(ABC):
         pass
 
     @abstractmethod
-    def chat(self, message: str) -> str:
+    def chat(
+        self,
+        messages: List[Dict],
+        system_prompt: str,
+        stream: bool = False
+    ) -> Union[str, Generator[str, None, None]]:
         """对话接口"""
         pass
 
     def detect_capabilities(self) -> dict:
-        """
-        根据模型名简单判断能力
-        后续可以改成读取 capability.yaml
-        """
         name = self.model_name.lower()
 
         return {

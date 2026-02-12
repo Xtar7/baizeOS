@@ -1,7 +1,17 @@
-# app/services/llm_service.py
-
+from pathlib import Path
 from app.config.settings import LLM_SCAN_PATH, DEFAULT_CHAT_MODEL
 from app.services.llms.llama_cpp import LlamaCppLLM
+
+PROMPT_DIR = Path("E:/baizeOS/config/prompts")
+
+
+def load_system_prompt(prompt_name: str) -> str:
+    prompt_file = PROMPT_DIR / f"{prompt_name}.txt"
+
+    if not prompt_file.exists():
+        return "You are a helpful assistant."
+
+    return prompt_file.read_text(encoding="utf-8").strip()
 
 
 class LLMService:
@@ -13,14 +23,9 @@ class LLMService:
         self.select_model()
 
     # ----------------------------
-    # 1. 模型扫描
+    # 模型扫描
     # ----------------------------
     def scan_models(self):
-        # print("[DEBUG] LLM_SCAN_PATH 类型:", type(LLM_SCAN_PATH))
-        # print("[DEBUG] LLM_SCAN_PATH 完整路径:", str(LLM_SCAN_PATH))
-        # print("[DEBUG] 是否存在:", LLM_SCAN_PATH.exists())
-        # print("[DEBUG] 是否是目录:", LLM_SCAN_PATH.is_dir())
-
         if not LLM_SCAN_PATH.exists():
             raise RuntimeError(f"模型目录不存在: {LLM_SCAN_PATH}")
 
@@ -35,19 +40,17 @@ class LLMService:
             raise RuntimeError("未发现任何 GGUF 模型")
 
     # ----------------------------
-    # 2. 自动选择模型
+    # 自动选择模型
     # ----------------------------
     def select_model(self):
         model_path = None
 
-        # 优先使用配置指定模型
         if DEFAULT_CHAT_MODEL:
             for m in self.models:
                 if DEFAULT_CHAT_MODEL in m.name:
                     model_path = m
                     break
 
-        # 否则选择第一个
         if not model_path:
             model_path = self.models[0]
 
@@ -58,13 +61,19 @@ class LLMService:
         print("[LLM] 模型能力:", self.active_llm.capabilities)
 
     # ----------------------------
-    # 3. 对外接口
+    # 对外接口
     # ----------------------------
-    def chat(self, message: str) -> str:
+    def chat(self, messages, stream=False, prompt_name="default"):
         if not self.active_llm:
             raise RuntimeError("LLM 未初始化")
 
-        return self.active_llm.chat(message)
+        system_prompt = load_system_prompt(prompt_name)
+
+        return self.active_llm.chat(
+            messages=messages,
+            system_prompt=system_prompt,
+            stream=stream
+        )
 
 
 # 全局单例
