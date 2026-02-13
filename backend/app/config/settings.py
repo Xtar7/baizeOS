@@ -39,6 +39,8 @@ LOG_RAG_DIR = LOG_DIR / "rag"
 # =============================================
 LLM_SCAN_PATH = MODEL_DIR / "llm"
 DEFAULT_CHAT_MODEL = None               # None 代表启动时自动选择第一个可用模型
+PROMPT_DIR = PROJECT_ROOT / "config" / "prompts"
+DEFAULT_PROMPT_NAME = "default"     # 提示词配置
 
 # 后端加载优先级（你目前主要用 vllm，也可以只留一个）
 LLM_BACKEND_PRIORITY = ["llama.cpp"]   # 顺序就是尝试顺序

@@ -2,7 +2,6 @@
 from flask import Flask
 from flask_cors import CORS
 
-# 改用 backend. 开头
 from app.api import register_blueprints
 
 

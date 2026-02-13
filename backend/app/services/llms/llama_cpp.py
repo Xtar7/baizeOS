@@ -41,27 +41,24 @@ class LlamaCppLLM(BaseLLM):
     # ----------------------------
     # 对话接口
     # ----------------------------
-    def chat(
-        self,
-        messages: List[Dict],
-        system_prompt: str,
-        stream: bool = False
-    ) -> Union[str, Generator[str, None, None]]:
-
-        prompt = self.build_prompt(messages, system_prompt)
-
-        output = self.llm(
-            prompt,
+    def chat(self, messages):
+        output = self.llm.create_chat_completion(
+            messages=messages,
             max_tokens=512,
-            stream=stream,
-            stop=["User:", "Assistant:"]
+            temperature=0.7,
         )
 
-        if not stream:
-            return output["choices"][0]["text"].strip()
+        return output["choices"][0]["message"]["content"]
 
-        def token_generator():
-            for chunk in output:
-                yield chunk["choices"][0]["text"]
+    def stream_chat(self, messages):
+        stream = self.llm.create_chat_completion(
+            messages=messages,
+            max_tokens=512,
+            temperature=0.7,
+            stream=True,
+        )
 
-        return token_generator()
+        for chunk in stream:
+            delta = chunk["choices"][0]["delta"]
+            if "content" in delta:
+                yield delta["content"]
