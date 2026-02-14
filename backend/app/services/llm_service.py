@@ -1,4 +1,5 @@
-from pathlib import Path
+# app/services/llm_service.py
+
 from app.config.settings import (
     LLM_SCAN_PATH,
     DEFAULT_CHAT_MODEL,

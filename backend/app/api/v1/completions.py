@@ -18,6 +18,7 @@ def chat_completions():
     data = request.json or {}
 
     messages = data.get("messages", [])
+    model = data.get("model")
     stream = data.get("stream", False)
     model = data.get("model", "local-model")
     prompt_name = data.get("prompt", "default")
@@ -30,6 +31,7 @@ def chat_completions():
     # -----------------------
     if not stream:
         reply = llm_service.completions(
+            model=model,
             messages=messages,
             stream=False,
             prompt_name=prompt_name
@@ -62,6 +64,7 @@ def chat_completions():
     # -----------------------
     def generate():
         token_stream = llm_service.completions(
+            model=model,
             messages=messages,
             stream=True,
             prompt_name=prompt_name
