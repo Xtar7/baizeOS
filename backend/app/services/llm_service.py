@@ -121,13 +121,14 @@ class LLMService:
     # -------------------------------------------------
     # OpenAI-compatible Chat Completions
     # -------------------------------------------------
-    def completions(
-        self,
-        messages: List[Dict[str, str]],
-        stream: bool = False,
-        model: str | None = None,
-        prompt_name: str = "default",
-        rag_context: str | None = None,
+    def chat_completions(
+            self,
+            messages: List[Dict[str, str]],
+            stream: bool = False,  # 保持原位置
+            model: str | None = None,
+            prompt_name: str = "default",
+            rag_context: str | None = None,
+            **kwargs
     ):
         """
         OpenAI 风格对话入口

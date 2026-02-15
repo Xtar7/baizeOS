@@ -1,3 +1,4 @@
+# app/api/v1/completions.py
 from flask import Blueprint, request, jsonify, Response
 import json
 import time
@@ -18,7 +19,7 @@ def chat_completions():
     model = data.get("model")
     prompt_name = data.get("prompt", "default")
 
-    # 新增 RAG 参数（不影响旧逻辑）
+    # RAG 参数
     rag = data.get("rag", False)
     kb_id = data.get("kb_id")
 
@@ -38,7 +39,7 @@ def chat_completions():
                 prompt_name=prompt_name,
             )
         else:
-            result = llm_service.completions(
+            result = llm_service.chat_completions(
                 messages=messages,
                 stream=False,
                 model=model,
@@ -76,7 +77,7 @@ def chat_completions():
                 prompt_name=prompt_name,
             )
         else:
-            token_stream = llm_service.completions(
+            token_stream = llm_service.chat_completions(
                 messages=messages,
                 stream=True,
                 model=model,

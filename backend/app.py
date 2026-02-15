@@ -11,6 +11,7 @@ from app import create_app   # 注意这里还是 from app import ...
 app = create_app()
 
 if __name__ == "__main__":
+    print(app.url_map)
     # print("=================================")
     # print(" BaizeOS Backend Starting")
     # print(f" Host: 0.0.0.0")

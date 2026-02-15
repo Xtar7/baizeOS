@@ -1,35 +1,21 @@
-# app/rag/retriever.py
-from pathlib import Path
-
-# 知识库根目录
-KB_ROOT = Path("knowledge_base")
+from app.rag.embedding import EmbeddingService
+from app.rag.index_manager import IndexManager
 
 
 class Retriever:
-    def search(self, query, kb_id, top_k=3):
-        """
-        最简版检索：
-        从 docs.txt 中按关键词返回前 top_k 行
-        """
+    def __init__(self, dim=768):
+        self.embedding = EmbeddingService(dim)
+        self.index_manager = IndexManager(dim)
 
-        kb_path = KB_ROOT / kb_id / "docs.txt"
+    def add_documents(self, texts, kb_id="default"):
+        vectors = self.embedding.embed(texts)
+        self.index_manager.add(vectors, texts, kb_id)
+        self.index_manager.save(kb_id)
 
-        if not kb_path.exists():
-            return ["（知识库为空）"]
-
-        lines = kb_path.read_text(encoding="utf-8").splitlines()
-
-        # 简单关键词匹配
-        results = []
-        for line in lines:
-            if any(word in line for word in query.split()):
-                results.append(line)
-
-        if not results:
-            results = lines[:top_k]
-
-        return results[:top_k]
+    def search(self, query, kb_id="default", top_k=5):
+        query_vec = self.embedding.embed([query])
+        return self.index_manager.search(query_vec, kb_id, top_k)
 
 
-# 全局单例
+# 全局实例
 retriever = Retriever()
