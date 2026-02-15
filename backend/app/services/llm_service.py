@@ -1,27 +1,50 @@
 # app/services/llm_service.py
 
-from app.config.settings import (
-    LLM_SCAN_PATH,
-    DEFAULT_CHAT_MODEL,
-    PROMPT_DIR,
-    DEFAULT_PROMPT_NAME
-)
+from pathlib import Path
+from typing import List, Dict, Any, Generator
+from app.config.settings import LLM_SCAN_PATH, DEFAULT_CHAT_MODEL
 from app.services.llms.llama_cpp import LlamaCppLLM
+
+
+# ================================
+# 路径配置
+# ================================
+PROJECT_ROOT = Path(__file__).resolve().parents[4]
+PROMPT_DIR = PROJECT_ROOT / "config" / "prompts"
+DEFAULT_PROMPT_FILE = PROMPT_DIR / "default.txt"
 
 
 class LLMService:
     def __init__(self):
-        self.models = []          # 所有模型路径
-        self.model_map = {}       # name -> path
-        self.active_llm = None    # 当前默认模型实例
-        self.active_model_name = None
+        self.models: Dict[str, Path] = {}
+        self.active_model_name: str | None = None
+        self.active_llm: LlamaCppLLM | None = None
+
+        self.system_prompt = self._load_default_prompt()
 
         self.scan_models()
-        self.select_model()
+        self.select_model(DEFAULT_CHAT_MODEL)
 
-    # ----------------------------
-    # 1. 模型扫描
-    # ----------------------------
+    # -------------------------------------------------
+    # Prompt 管理
+    # -------------------------------------------------
+    def _load_default_prompt(self) -> str:
+        if DEFAULT_PROMPT_FILE.exists():
+            return DEFAULT_PROMPT_FILE.read_text(encoding="utf-8").strip()
+        return ""
+
+    def _load_prompt(self, prompt_name: str) -> str:
+        """
+        加载指定 prompt
+        """
+        prompt_file = PROMPT_DIR / f"{prompt_name}.txt"
+        if prompt_file.exists():
+            return prompt_file.read_text(encoding="utf-8").strip()
+        return self.system_prompt
+
+    # -------------------------------------------------
+    # 模型管理
+    # -------------------------------------------------
     def scan_models(self):
         if not LLM_SCAN_PATH.exists():
             raise RuntimeError(f"模型目录不存在: {LLM_SCAN_PATH}")
@@ -30,116 +53,153 @@ class LLMService:
 
         for file in LLM_SCAN_PATH.iterdir():
             if file.suffix.lower() == ".gguf":
-                model_name = file.stem
-                print(f"[LLM] 发现模型: {model_name}")
-
-                self.models.append(file)
-                self.model_map[model_name] = file
+                print(f"[LLM] 发现模型: {file.name}")
+                self.models[file.stem] = file
 
         if not self.models:
             raise RuntimeError("未发现任何 GGUF 模型")
 
-    # ----------------------------
-    # 2. 自动选择默认模型
-    # ----------------------------
-    def select_model(self):
-        model_path = None
-
-        # 优先使用配置指定模型
-        if DEFAULT_CHAT_MODEL:
-            for name, path in self.model_map.items():
-                if DEFAULT_CHAT_MODEL in name:
-                    model_path = path
-                    self.active_model_name = name
-                    break
-
-        # 否则选择第一个
-        if not model_path:
-            model_path = self.models[0]
-            self.active_model_name = model_path.stem
-
-        print(f"[LLM] 选择默认模型: {self.active_model_name}")
-
-        self.active_llm = LlamaCppLLM(model_path)
-
-        print("[LLM] 模型能力:", self.active_llm.capabilities)
-
-    # ----------------------------
-    # 3. 根据请求选择模型
-    # ----------------------------
-    def get_llm(self, model_name: str | None):
+    def select_model(self, model_name: str | None = None):
         """
-        根据请求的 model 参数选择模型
+        模型选择（带热切换优化）
         """
-        if not model_name:
-            return self.active_llm
+        # 如果模型没变，不重复加载
+        if model_name == self.active_model_name and self.active_llm:
+            return
 
-        # 模糊匹配
-        for name, path in self.model_map.items():
-            if model_name in name:
-                print(f"[LLM] 临时切换模型: {name}")
-                return LlamaCppLLM(path)
+        if model_name and model_name in self.models:
+            path = self.models[model_name]
+        else:
+            # 默认选择第一个
+            path = next(iter(self.models.values()))
+            model_name = path.stem
 
-        raise ValueError(f"未找到模型: {model_name}")
+        print(f"[LLM] 使用模型: {model_name}")
 
-    # ----------------------------
-    # 4. 加载默认 prompt
-    # ----------------------------
-    def load_prompt(self, prompt_name: str):
-        prompt_file = PROMPT_DIR / f"{prompt_name}.txt"
+        self.active_llm = LlamaCppLLM(path)
+        self.active_model_name = model_name
 
-        if not prompt_file.exists():
-            raise FileNotFoundError(f"Prompt 不存在: {prompt_file}")
+    # -------------------------------------------------
+    # Token 统计
+    # -------------------------------------------------
+    def _count_tokens(self, text: str) -> int:
+        if not text or not self.active_llm:
+            return 0
+        llm = self.active_llm.llm
+        return len(llm.tokenize(text.encode("utf-8")))
 
-        return prompt_file.read_text(encoding="utf-8").strip()
+    # -------------------------------------------------
+    # Prompt 构造（支持 RAG）
+    # -------------------------------------------------
+    def _build_prompt_text_with_rag(
+        self,
+        system_prompt: str,
+        messages: List[Dict[str, str]],
+        rag_context: str | None = None,
+    ) -> str:
+        parts = []
 
-    # ----------------------------
-    # 5. 注入 system prompt
-    # ----------------------------
-    def inject_system_prompt(self, messages, prompt_name):
-        """
-        如果 messages 中没有 system，则注入默认 prompt
-        """
-        if not messages:
-            messages = []
+        if system_prompt:
+            parts.append(f"System: {system_prompt}")
 
-        has_system = any(m.get("role") == "system" for m in messages)
+        # RAG 注入位置
+        if rag_context:
+            parts.append("Knowledge:")
+            parts.append(rag_context)
 
-        if not has_system:
-            system_prompt = self.load_prompt(prompt_name)
-            messages = [
-                {"role": "system", "content": system_prompt}
-            ] + messages
+        for msg in messages:
+            role = msg.get("role")
+            content = msg.get("content", "")
+            if role == "user":
+                parts.append(f"User: {content}")
+            elif role == "assistant":
+                parts.append(f"Assistant: {content}")
 
-        return messages
+        parts.append("Assistant:")
+        return "\n".join(parts)
 
-    # ----------------------------
-    # 6. OpenAI 兼容接口
-    # ----------------------------
+    # -------------------------------------------------
+    # OpenAI-compatible Chat Completions
+    # -------------------------------------------------
     def completions(
         self,
-        messages,
-        stream=False,
-        prompt_name=DEFAULT_PROMPT_NAME,
-        model=None
+        messages: List[Dict[str, str]],
+        stream: bool = False,
+        model: str | None = None,
+        prompt_name: str = "default",
+        rag_context: str | None = None,
     ):
         """
         OpenAI 风格对话入口
+        支持：
+        - 多模型切换
+        - 多 prompt
+        - RAG 上下文注入
+        - usage 统计
         """
-        if not messages:
-            raise ValueError("messages 不能为空")
 
-        llm = self.get_llm(model)
+        if model:
+            self.select_model(model)
 
-        # 注入默认 system prompt
-        messages = self.inject_system_prompt(messages, prompt_name)
+        # 加载 prompt
+        system_prompt = self._load_prompt(prompt_name)
 
-        # 非流式
+        prompt_text = self._build_prompt_text_with_rag(
+            system_prompt,
+            messages,
+            rag_context,
+        )
+
+        prompt_tokens = self._count_tokens(prompt_text)
+
+        # ---------------- 非流式 ----------------
         if not stream:
-            return llm.chat(messages)
+            output = self.active_llm.llm(
+                prompt_text,
+                max_tokens=512,
+                stop=["</s>"],
+            )
 
-        # 流式
-        return llm.stream_chat(messages)
+            content = output["choices"][0]["text"].strip()
+            completion_tokens = self._count_tokens(content)
+
+            return {
+                "content": content,
+                "usage": {
+                    "prompt_tokens": prompt_tokens,
+                    "completion_tokens": completion_tokens,
+                    "total_tokens": prompt_tokens + completion_tokens,
+                },
+                "model": self.active_model_name,
+            }
+
+        # ---------------- 流式 ----------------
+        def stream_generator() -> Generator[Dict[str, Any], None, None]:
+            completion_tokens = 0
+
+            for chunk in self.active_llm.llm(
+                prompt_text,
+                max_tokens=512,
+                stream=True,
+            ):
+                delta = chunk["choices"][0]["text"]
+                completion_tokens += self._count_tokens(delta)
+
+                yield {
+                    "delta": delta,
+                }
+
+            yield {
+                "done": True,
+                "usage": {
+                    "prompt_tokens": prompt_tokens,
+                    "completion_tokens": completion_tokens,
+                    "total_tokens": prompt_tokens + completion_tokens,
+                },
+                "model": self.active_model_name,
+            }
+
+        return stream_generator()
 
 
 # 全局单例

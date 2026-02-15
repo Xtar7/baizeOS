@@ -1,110 +1,127 @@
-# app/api/v1/chat.py
 from flask import Blueprint, request, jsonify, Response
 import json
 import time
 import uuid
 
 from app.services.llm_service import llm_service
+from app.services.rag_service import rag_service
 
-chat_bp = Blueprint("openai_chat", __name__, url_prefix="/v1")
-
-
-def generate_id():
-    return "chatcmpl-" + uuid.uuid4().hex[:24]
+chat_bp = Blueprint("chat", __name__, url_prefix="/v1/chat")
 
 
-@chat_bp.route("/chat/completions", methods=["POST"])
+@chat_bp.route("/completions", methods=["POST"])
 def chat_completions():
     data = request.json or {}
 
     messages = data.get("messages", [])
-    model = data.get("model")
     stream = data.get("stream", False)
-    model = data.get("model", "local-model")
+    model = data.get("model")
     prompt_name = data.get("prompt", "default")
 
-    completion_id = generate_id()
-    created = int(time.time())
+    # 新增 RAG 参数（不影响旧逻辑）
+    rag = data.get("rag", False)
+    kb_id = data.get("kb_id")
 
-    # -----------------------
+    completion_id = f"chatcmpl-{uuid.uuid4().hex[:24]}"
+    created_time = int(time.time())
+
+    # =========================
     # 非流式
-    # -----------------------
+    # =========================
     if not stream:
-        reply = llm_service.completions(
-            model=model,
-            messages=messages,
-            stream=False,
-            prompt_name=prompt_name
-        )
+        if rag:
+            result = rag_service.rag_chat(
+                messages=messages,
+                kb_id=kb_id,
+                stream=False,
+                model=model,
+                prompt_name=prompt_name,
+            )
+        else:
+            result = llm_service.completions(
+                messages=messages,
+                stream=False,
+                model=model,
+                prompt_name=prompt_name,
+            )
 
         return jsonify({
             "id": completion_id,
             "object": "chat.completion",
-            "created": created,
-            "model": model,
+            "created": created_time,
+            "model": result["model"],
             "choices": [
                 {
                     "index": 0,
                     "message": {
                         "role": "assistant",
-                        "content": reply
+                        "content": result["content"],
                     },
-                    "finish_reason": "stop"
+                    "finish_reason": "stop",
                 }
             ],
-            "usage": {
-                "prompt_tokens": 0,
-                "completion_tokens": 0,
-                "total_tokens": 0
-            }
+            "usage": result["usage"],
         })
 
-    # -----------------------
+    # =========================
     # 流式
-    # -----------------------
+    # =========================
     def generate():
-        token_stream = llm_service.completions(
-            model=model,
-            messages=messages,
-            stream=True,
-            prompt_name=prompt_name
-        )
+        if rag:
+            token_stream = rag_service.rag_chat(
+                messages=messages,
+                kb_id=kb_id,
+                stream=True,
+                model=model,
+                prompt_name=prompt_name,
+            )
+        else:
+            token_stream = llm_service.completions(
+                messages=messages,
+                stream=True,
+                model=model,
+                prompt_name=prompt_name,
+            )
 
-        for token in token_stream:
-            chunk = {
+        for chunk in token_stream:
+            # 最终 usage 包
+            if "done" in chunk:
+                data_obj = {
+                    "id": completion_id,
+                    "object": "chat.completion.chunk",
+                    "created": created_time,
+                    "model": chunk["model"],
+                    "choices": [
+                        {
+                            "index": 0,
+                            "delta": {},
+                            "finish_reason": "stop",
+                        }
+                    ],
+                    "usage": chunk["usage"],
+                }
+                yield f"data: {json.dumps(data_obj, ensure_ascii=False)}\n\n"
+                break
+
+            # 普通 token
+            data_obj = {
                 "id": completion_id,
                 "object": "chat.completion.chunk",
-                "created": created,
+                "created": created_time,
                 "model": model,
                 "choices": [
                     {
                         "index": 0,
                         "delta": {
-                            "content": token
+                            "content": chunk["delta"]
                         },
-                        "finish_reason": None
+                        "finish_reason": None,
                     }
-                ]
+                ],
             }
 
-            yield f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
+            yield f"data: {json.dumps(data_obj, ensure_ascii=False)}\n\n"
 
-        # 结束帧
-        end_chunk = {
-            "id": completion_id,
-            "object": "chat.completion.chunk",
-            "created": created,
-            "model": model,
-            "choices": [
-                {
-                    "index": 0,
-                    "delta": {},
-                    "finish_reason": "stop"
-                }
-            ]
-        }
-
-        yield f"data: {json.dumps(end_chunk)}\n\n"
         yield "data: [DONE]\n\n"
 
     return Response(generate(), mimetype="text/event-stream")
