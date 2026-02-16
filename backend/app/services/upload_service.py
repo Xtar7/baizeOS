@@ -1,7 +1,7 @@
-# app/services/upload_service.py
+# backend/app/services/upload_service.py
 import uuid
-from pathlib import Path
 import mimetypes
+from pathlib import Path
 from datetime import datetime
 
 from app.config.settings import PROJECT_ROOT
@@ -9,7 +9,7 @@ from app.services.rag_service import rag_service
 from app.rag.parser import DocumentParser
 
 
-ALLOWED_EXTENSIONS = {".txt", ".md"}
+ALLOWED_EXTENSIONS = {".txt", ".md", ".pdf"}
 
 KB_ROOT = PROJECT_ROOT / "knowledge_base"
 KB_ROOT.mkdir(parents=True, exist_ok=True)
@@ -19,6 +19,9 @@ class UploadService:
     def __init__(self):
         self.parser = DocumentParser()
 
+    # -----------------------------
+    # 校验
+    # -----------------------------
     def validate_extension(self, filename: str):
         ext = Path(filename).suffix.lower()
         if ext not in ALLOWED_EXTENSIONS:
@@ -26,22 +29,34 @@ class UploadService:
 
     def validate_mime(self, file_path: Path):
         mime, _ = mimetypes.guess_type(str(file_path))
-        if mime and not mime.startswith("text"):
+        if mime and not (
+            mime.startswith("text") or mime == "application/pdf"
+        ):
             raise ValueError("文件 MIME 类型不合法")
 
-    def _get_save_dir(self, kb_id: str) -> Path:
-        """
-        根据 kb_id 和日期生成保存目录
-        knowledge_base/kb_id/files/yyyy-mm-dd/
-        """
-        date_str = datetime.now().strftime("%Y-%m-%d")
-        save_dir = KB_ROOT / kb_id / "files" / date_str
+    # -----------------------------
+    # KB 文件保存路径
+    # -----------------------------
+    def build_kb_file_path(self, kb_id: str, ext: str) -> Path:
+        today = datetime.now().strftime("%Y-%m-%d")
+
+        save_dir = (
+            KB_ROOT
+            / kb_id
+            / "tmp"
+            / today
+            / ext.lstrip(".")
+        )
+
         save_dir.mkdir(parents=True, exist_ok=True)
         return save_dir
 
+    # -----------------------------
+    # 主上传流程
+    # -----------------------------
     def save_and_index(self, file_storage, kb_id=None):
         """
-        完整上传流水线
+        完整 KB 上传 + 向量入库流水线
         """
         # 默认知识库
         if not kb_id:
@@ -54,30 +69,34 @@ class UploadService:
         # 1. 扩展名检查
         self.validate_extension(filename)
 
-        # 2. 获取知识库存储目录
-        save_dir = self._get_save_dir(kb_id)
-
-        # 3. 随机文件名
-        file_id = uuid.uuid4().hex
         ext = Path(filename).suffix.lower()
+
+        # 2. 构造保存路径
+        save_dir = self.build_kb_file_path(kb_id, ext)
+        file_id = uuid.uuid4().hex
         save_path = save_dir / f"{file_id}{ext}"
 
-        # 4. 保存文件
+        # 3. 保存文件
         file_storage.save(save_path)
 
-        # 5. MIME 检查
+        # 4. MIME 检查
         self.validate_mime(save_path)
 
-        # 6. 文本解析
+        # 5. 文本解析
         text = self.parser.parse(save_path)
 
-        if not text.strip():
-            raise ValueError("文件内容为空或解析失败")
+        if not text or not text.strip():
+            raise ValueError("文件解析为空")
 
-        # 7. 入库
+        # 6. RAG 入库
         rag_service.ingest_text(text, kb_id=kb_id)
 
-        return kb_id
+        return {
+            "file_id": file_id,
+            "kb_id": kb_id,
+            "filename": filename,
+            "path": str(save_path),
+        }
 
 
 upload_service = UploadService()

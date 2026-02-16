@@ -1,4 +1,4 @@
-# app/api/v1/upload.py
+# backend/app/api/v1/kb/kb_upload.py
 from flask import Blueprint, request, jsonify
 from app.services.upload_service import upload_service
 

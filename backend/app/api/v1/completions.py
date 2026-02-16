@@ -1,4 +1,4 @@
-# app/api/v1/completions.py
+# backend/app/api/v1/completions.py
 from flask import Blueprint, request, jsonify, Response
 import json
 import time
@@ -7,10 +7,10 @@ import uuid
 from app.services.llm_service import llm_service
 from app.services.rag_service import rag_service
 
-chat_bp = Blueprint("chat", __name__, url_prefix="/v1/chat")
+chat_bp = Blueprint("chat", __name__, url_prefix="/v1")
 
 
-@chat_bp.route("/completions", methods=["POST"])
+@chat_bp.route("/chat/completions", methods=["POST"])
 def chat_completions():
     data = request.json or {}
 

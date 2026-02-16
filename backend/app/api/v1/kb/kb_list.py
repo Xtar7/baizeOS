@@ -1,5 +1,4 @@
-# app/api/v1/kb_list.py
-
+# backend/app/api/v1/kb/kb_list.py
 from flask import Blueprint, jsonify
 from app.config.settings import KB_DIR
 

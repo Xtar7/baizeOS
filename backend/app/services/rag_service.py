@@ -1,83 +1,111 @@
-# app/services/rag_service.py
+# backend/app/services/rag_service.py
+import json
+from app.config.settings import PROJECT_ROOT
 from app.rag.retriever import Retriever
-from app.rag.chunker import chunk_text
-from app.services.llm_service import LLMService
+from app.services.llm_service import llm_service
+
+
+KB_ROOT = PROJECT_ROOT / "knowledge_base"
 
 
 class RAGService:
     def __init__(self):
         self.retriever = Retriever()
-        self.llm = LLMService()
 
     # -----------------------------
-    # 0. 文本入库（upload用）
+    # 读取 KB 的 system_prompt
     # -----------------------------
-    def ingest_text(self, text, kb_id):
-        """
-        文本 → 切分 → 向量化 → 入库
-        """
-        chunks = chunk_text(text)
-        if not chunks:
-            return 0
+    def load_kb_prompt(self, kb_id: str) -> str:
+        if not kb_id:
+            return ""
 
-        self.retriever.add_documents(chunks, kb_id=kb_id)
-        return len(chunks)
+        meta_path = KB_ROOT / kb_id / "kb_meta.json"
+        if not meta_path.exists():
+            return ""
+
+        try:
+            with open(meta_path, "r", encoding="utf-8") as f:
+                meta = json.load(f)
+            return meta.get("system_prompt", "")
+        except Exception:
+            return ""
 
     # -----------------------------
-    # 1. 向量检索
+    # 向量检索
     # -----------------------------
     def retrieve_context(self, query, kb_id, top_k=3):
+        if not kb_id:
+            return []
         return self.retriever.search(query, kb_id=kb_id, top_k=top_k)
 
     # -----------------------------
-    # 2. 构造 RAG Prompt
+    # 构造 RAG messages
     # -----------------------------
     def build_rag_messages(self, messages, kb_id):
         if not messages:
             return messages
 
+        # 获取用户最后一句话
         user_query = None
         for msg in reversed(messages):
             if msg.get("role") == "user":
                 user_query = msg.get("content")
                 break
 
-        if not user_query or not kb_id:
+        if not user_query:
             return messages
 
         contexts = self.retrieve_context(user_query, kb_id=kb_id)
 
-        if not contexts:
-            return messages
+        kb_prompt = self.load_kb_prompt(kb_id)
 
-        context_text = "\n\n".join(contexts)
+        system_parts = []
+
+        if kb_prompt:
+            system_parts.append(kb_prompt)
+
+        if contexts:
+            context_text = "\n\n".join(contexts)
+            system_parts.append(
+                "Use the following knowledge base context when relevant:\n"
+                + context_text
+            )
+
+        if not system_parts:
+            return messages
 
         system_prompt = {
             "role": "system",
-            "content": (
-                "You are a helpful assistant. "
-                "Answer using the provided context. "
-                "If the context is not relevant, answer normally.\n\n"
-                f"Context:\n{context_text}"
-            ),
+            "content": "\n\n".join(system_parts),
         }
 
         return [system_prompt] + messages
 
     # -----------------------------
-    # 3. RAG主流程
+    # 入库（给 upload 调用）
     # -----------------------------
-    def rag_chat(self, messages, kb_id=None, model=None, stream=False, **kwargs):
+    def ingest_text(self, text: str, kb_id: str):
+        if not kb_id:
+            kb_id = "default"
+
+        self.retriever.add_documents(
+            texts=[text],
+            kb_id=kb_id
+        )
+
+    # -----------------------------
+    # RAG 主入口（兼容 chat_completions）
+    # -----------------------------
+    def rag_chat(self, messages, kb_id=None, stream=False, **kwargs):
         rag_messages = self.build_rag_messages(messages, kb_id=kb_id)
 
-        # ⚠️ 改为调用 completions（你真实存在的方法）
-        return self.llm.chat_completions(
+        # 直接复用原始 LLM 接口
+        return llm_service.chat_completions(
             messages=rag_messages,
-            model=model,
             stream=stream,
             **kwargs
         )
 
 
-# 全局实例
+# 全局实例（供接口调用）
 rag_service = RAGService()

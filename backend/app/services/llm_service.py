@@ -1,5 +1,4 @@
-# app/services/llm_service.py
-
+# backend/app/services/llm_service.py
 from pathlib import Path
 from typing import List, Dict, Any, Generator
 from app.config.settings import LLM_SCAN_PATH, DEFAULT_CHAT_MODEL
