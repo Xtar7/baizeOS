@@ -7,14 +7,21 @@ kb_create_bp = Blueprint("kb_create", __name__, url_prefix="/v1/kb")
 @kb_create_bp.route("/", methods=["POST"])
 def create_kb():
     data = request.json or {}
-    name = data.get("name")
+    display_name = data.get("display_name")
     system_prompt = data.get("system_prompt", "")
+    description = data.get("description", "")
 
-    if not name:
-        return jsonify({"error": "missing kb name"}), 400
+    if not display_name or not display_name.strip():
+        return jsonify({"error": "缺少或无效的 display_name"}), 400
 
     try:
-        meta = kb_service.create(name, system_prompt)
-        return jsonify(meta)
+        meta = kb_service.create(
+            display_name=display_name.strip(),
+            system_prompt=system_prompt,
+            description=description
+        )
+        return jsonify(meta), 201
+    except ValueError as ve:
+        return jsonify({"error": str(ve)}), 400
     except Exception as e:
-        return jsonify({"error": str(e)}), 400
+        return jsonify({"error": f"创建失败: {str(e)}"}), 500

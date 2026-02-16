@@ -10,8 +10,13 @@ from app import create_app   # 注意这里还是 from app import ...
 
 app = create_app()
 
+print("\n=== 所有已注册路由 ===")
+for rule in app.url_map.iter_rules():
+    print(f"{rule.methods} → {rule}")
+print("=====================\n")
+
 if __name__ == "__main__":
-    print(app.url_map)
+    # print(app.url_map)
     # print("=================================")
     # print(" BaizeOS Backend Starting")
     # print(f" Host: 0.0.0.0")
