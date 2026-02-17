@@ -6,8 +6,8 @@ from datetime import datetime
 
 from app.config.settings import PROJECT_ROOT
 
-
-DATA_ROOT = PROJECT_ROOT / "data"
+BACKEND_ROOT = PROJECT_ROOT / "backend"
+DATA_ROOT = BACKEND_ROOT / "data"
 DATA_ROOT.mkdir(parents=True, exist_ok=True)
 
 
@@ -45,7 +45,7 @@ class TmpService:
         mime, _ = mimetypes.guess_type(str(save_path))
 
         return {
-            "id": file_id,
+            "file_id": file_id,
             "object": "file",
             "chat_id": chat_id,
             "filename": filename,
@@ -69,7 +69,7 @@ class TmpService:
         for path in base:
             if path.is_file():
                 files.append({
-                    "id": path.stem,
+                    "file_id": path.stem,
                     "object": "file",
                     "filename": path.name,
                     "bytes": path.stat().st_size,

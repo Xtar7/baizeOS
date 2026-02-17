@@ -12,7 +12,13 @@ MODEL_DIR      = PROJECT_ROOT / "models"
 LLM_SCAN_PATH  = MODEL_DIR / "llm"
 KB_DIR         = PROJECT_ROOT / "knowledge_base"
 LOG_DIR        = PROJECT_ROOT / "logs"
+# 测试data文件夹问题
+# print("settings.py 位置:", Path(__file__).resolve())
+# print("计算出的 PROJECT_ROOT:", PROJECT_ROOT)
+# print("backend 是否存在:", (PROJECT_ROOT / "backend").exists())
+# print("data 是否存在:", (PROJECT_ROOT / "backend" / "data").exists())
 
+# 测试config配置问题
 # print("[CONFIG] PROJECT_ROOT   :", PROJECT_ROOT)
 # print("[CONFIG] MODEL_DIR      :", MODEL_DIR)
 # print("[CONFIG] LLM_SCAN_PATH  :", LLM_SCAN_PATH)

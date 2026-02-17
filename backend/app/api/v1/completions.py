@@ -49,7 +49,7 @@ def chat_completions():
                 )
 
             return jsonify({
-                "id": completion_id,
+                "chat_id": completion_id,
                 "object": "chat.completion",
                 "created": created_time,
                 "model": result.get("model", model),
@@ -92,7 +92,7 @@ def chat_completions():
                     # 最后一块，带 usage
                     final_usage = chunk.get("usage")
                     yield f"data: {json.dumps({
-                        'id': completion_id,
+                        'chat_id': completion_id,
                         'object': 'chat.completion.chunk',
                         'created': created_time,
                         'model': model,
@@ -108,7 +108,7 @@ def chat_completions():
                 # 普通 chunk
                 delta_content = chunk.get("delta", "") if isinstance(chunk, dict) else str(chunk)
                 yield f"data: {json.dumps({
-                    'id': completion_id,
+                    "chat_id": completion_id,
                     'object': 'chat.completion.chunk',
                     'created': created_time,
                     'model': model,
