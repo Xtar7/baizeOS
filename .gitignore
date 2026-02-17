@@ -216,3 +216,6 @@ tools/
 
 # Knowledge base folders
 knowledge_base/
+
+# Backend data folder
+backend/data/

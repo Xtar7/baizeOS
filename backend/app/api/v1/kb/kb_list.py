@@ -16,7 +16,7 @@ def list_kb():
         # 可以选择只返回部分字段，减少响应体积
         simplified = [
             {
-                "id": kb["id"],
+                "kb_id": kb["kb_id"],
                 "display_name": kb["display_name"],
                 "description": kb.get("description", ""),
                 "created_at": kb["created_at"],

@@ -5,7 +5,7 @@ import shutil
 from pathlib import Path
 from datetime import datetime
 import time
-import uuid  # 用于随机部分
+import uuid
 
 from app.config.settings import PROJECT_ROOT
 
@@ -18,53 +18,35 @@ def _now():
 
 class KBService:
     def __init__(self):
-        # 确保 knowledge_base 目录存在
         KB_ROOT.mkdir(parents=True, exist_ok=True)
 
     def _generate_uuid_v7(self) -> str:
         """
         生成 UUID v7（时间有序 + 随机）
-        - 前48位：毫秒级 Unix 时间戳
-        - 版本位：0111 (v7)
-        - 变体位：10xx (RFC 4122)
-        - 剩余随机位
         """
-        # Unix 时间戳（毫秒）
         timestamp_ms = int(time.time() * 1000)
         ts_bytes = timestamp_ms.to_bytes(6, 'big')
-
-        # 随机字节（从 uuid4 取）
         rand_bytes = uuid.uuid4().bytes
 
-        # 构造 16 字节 UUID
         uuid_bytes = bytearray(16)
         uuid_bytes[0:6] = ts_bytes
-        # 第7字节：版本 7 (0b0111xxxx)
         uuid_bytes[6] = 0x70 | (rand_bytes[0] & 0x0f)
-        # 字节7-9：随机 (24 位)
         uuid_bytes[7:10] = rand_bytes[1:4]
-        # 第11字节：变体 0b10xxxxxx
         uuid_bytes[10] = 0x80 | (rand_bytes[4] & 0x3f)
-        # 剩余字节：随机 (40 位)
         uuid_bytes[11:16] = rand_bytes[5:10]
 
         return str(uuid.UUID(bytes=bytes(uuid_bytes)))
 
     def _kb_path(self, kb_id: str) -> Path:
-        """知识库文件夹路径：直接用 kb_id (UUID)"""
         return KB_ROOT / kb_id
 
     def _meta_path(self, kb_id: str) -> Path:
-        """meta.json 路径"""
         return self._kb_path(kb_id) / "kb_meta.json"
 
     # -----------------------------
     # 创建知识库
     # -----------------------------
     def create(self, display_name: str, system_prompt: str = "", description: str = ""):
-        """
-        创建 KB：生成 UUID id，display_name 是用户可见名字
-        """
         if not display_name or not display_name.strip():
             raise ValueError("知识库名称不能为空")
 
@@ -72,15 +54,13 @@ class KBService:
         kb_path = self._kb_path(kb_id)
 
         if kb_path.exists():
-            # UUID 冲突概率极低，理论上不会发生
             raise ValueError("知识库已存在")
 
-        # 创建目录结构
         (kb_path / "files").mkdir(parents=True)
         (kb_path / "vector_store").mkdir()
 
         meta = {
-            "id": kb_id,
+            "kb_id": kb_id,
             "display_name": display_name.strip(),
             "description": description,
             "system_prompt": system_prompt,
@@ -121,7 +101,7 @@ class KBService:
         return result
 
     # -----------------------------
-    # 删除 KB（用 UUID id）
+    # 删除 KB
     # -----------------------------
     def delete(self, kb_id: str):
         kb_path = self._kb_path(kb_id)
@@ -131,12 +111,9 @@ class KBService:
         return False
 
     # -----------------------------
-    # 重命名 KB（只改 display_name）
+    # 重命名 KB（保留，专门用于重命名场景）
     # -----------------------------
     def rename(self, kb_id: str, new_display_name: str):
-        """
-        重命名：只修改 meta.display_name，不动文件夹、文件或向量存储
-        """
         meta_path = self._meta_path(kb_id)
         if not meta_path.exists():
             raise ValueError("知识库不存在")
@@ -157,7 +134,7 @@ class KBService:
         return meta
 
     # -----------------------------
-    # 更新 system_prompt
+    # 更新 system_prompt（保留，专门用于修改提示词场景）
     # -----------------------------
     def update_prompt(self, kb_id: str, system_prompt: str):
         meta_path = self._meta_path(kb_id)
@@ -172,6 +149,45 @@ class KBService:
 
         with open(meta_path, "w", encoding="utf-8") as f:
             json.dump(meta, f, ensure_ascii=False, indent=2)
+
+        return meta
+
+    # -----------------------------
+    # 通用更新（新增，可替代 rename 和 update_prompt）
+    # -----------------------------
+    def update(self, kb_id: str, display_name: str = None, system_prompt: str = None, description: str = None) -> dict:
+        """
+        通用更新：只更新提供的字段，未提供的字段保持原值
+        可替代 rename 和 update_prompt
+        """
+        meta_path = self._meta_path(kb_id)
+        if not meta_path.exists():
+            raise ValueError("知识库不存在")
+
+        with open(meta_path, "r", encoding="utf-8") as f:
+            meta = json.load(f)
+
+        updated = False
+
+        if display_name is not None:
+            new_name = display_name.strip()
+            if not new_name:
+                raise ValueError("名称不能为空")
+            meta["display_name"] = new_name
+            updated = True
+
+        if system_prompt is not None:
+            meta["system_prompt"] = system_prompt
+            updated = True
+
+        if description is not None:
+            meta["description"] = description
+            updated = True
+
+        if updated:
+            meta["updated_at"] = _now()
+            with open(meta_path, "w", encoding="utf-8") as f:
+                json.dump(meta, f, ensure_ascii=False, indent=2)
 
         return meta
 
@@ -192,13 +208,11 @@ class KBService:
             raise ValueError("文件缺少扩展名")
 
         date_str = datetime.utcnow().strftime("%Y-%m-%d")
-
         save_dir = kb_path / "files" / date_str / ext
         save_dir.mkdir(parents=True, exist_ok=True)
 
-        file_id = datetime.utcnow().strftime("%H%M%S%f")
-        stored_name = f"{file_id}.{ext}"
-
+        kb_file_id = datetime.utcnow().strftime("%H%M%S%f")
+        stored_name = f"{kb_file_id}.{ext}"
         save_path = save_dir / stored_name
 
         try:
@@ -206,7 +220,6 @@ class KBService:
         except Exception as e:
             raise RuntimeError(f"文件保存失败: {str(e)}")
 
-        # 更新 meta
         meta_path = self._meta_path(kb_id)
         try:
             with open(meta_path, "r", encoding="utf-8") as f:
@@ -214,14 +227,18 @@ class KBService:
         except Exception as e:
             raise RuntimeError(f"读取 meta 失败: {str(e)}")
 
+        # 相对路径
+        rel_path = save_path.relative_to(KB_ROOT.parent)
+        rel_path_str = f"/{rel_path.as_posix()}"
+
         meta["files"].append({
-            "id": file_id,
+            "kb_file_id": kb_file_id,
             "filename": filename,
             "stored_name": stored_name,
-            "path": str(save_path),
+            "path": rel_path_str,
             "created_at": _now(),
-            "size": save_path.stat().st_size,  # 新增：记录文件大小
-            "mime_type": mimetypes.guess_type(str(save_path))[0]  # 新增：MIME
+            "size": save_path.stat().st_size,
+            "mime_type": mimetypes.guess_type(str(save_path))[0]
         })
 
         meta["updated_at"] = _now()
@@ -230,12 +247,165 @@ class KBService:
             with open(meta_path, "w", encoding="utf-8") as f:
                 json.dump(meta, f, ensure_ascii=False, indent=2)
         except Exception as e:
-            save_path.unlink(missing_ok=True)  # 失败时删除已保存的文件
+            save_path.unlink(missing_ok=True)
             raise RuntimeError(f"更新 meta 失败: {str(e)}")
 
         return meta
 
+    # -----------------------------
+    # 删除单个文件（纯相对路径）
+    # -----------------------------
+    def delete_file(self, kb_id: str, kb_file_id: str) -> dict:
+        meta_path = self._meta_path(kb_id)
+        if not meta_path.exists():
+            raise ValueError("知识库不存在")
+
+        with open(meta_path, "r", encoding="utf-8") as f:
+            meta = json.load(f)
+
+        files = meta.get("files", [])
+        target_file = None
+        target_index = -1
+        for i, f in enumerate(files):
+            if f.get("kb_file_id") == kb_file_id:
+                target_file = f
+                target_index = i
+                break
+
+        if not target_file:
+            raise ValueError("文件不存在")
+
+        from pathlib import Path
+
+        # ========== 修改：相对路径转绝对路径 ==========
+        relative_path = target_file["path"].lstrip("/")
+        file_path = PROJECT_ROOT.parent / relative_path
+        # ============================================
+
+        backup_path = None
+        if file_path.exists():
+            backup_path = file_path.with_suffix(file_path.suffix + ".bak")
+            try:
+                file_path.rename(backup_path)
+            except Exception as e:
+                raise RuntimeError(f"备份文件失败: {str(e)}")
+
+        original_files = meta["files"].copy()
+        meta["files"].pop(target_index)
+        meta["updated_at"] = _now()
+
+        try:
+            with open(meta_path, "w", encoding="utf-8") as f:
+                json.dump(meta, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            if backup_path and backup_path.exists():
+                try:
+                    backup_path.rename(file_path)
+                except Exception:
+                    pass
+            raise RuntimeError(f"更新 meta 失败: {str(e)}")
+
+        if backup_path and backup_path.exists():
+            try:
+                backup_path.unlink()
+            except Exception:
+                pass
+
+        return {
+            "kb_id": kb_id,
+            "kb_file_id": kb_file_id,
+            "deleted": True
+        }
+
+    # -----------------------------
+    # 批量删除文件（纯相对路径）
+    # -----------------------------
+    def batch_delete_files(self, kb_id: str, kb_file_ids: list) -> dict:
+        if not kb_file_ids:
+            raise ValueError("kb_file_ids 不能为空")
+
+        meta_path = self._meta_path(kb_id)
+        if not meta_path.exists():
+            raise ValueError("知识库不存在")
+
+        with open(meta_path, "r", encoding="utf-8") as f:
+            meta = json.load(f)
+
+        files = meta.get("files", [])
+
+        targets = []
+        for kb_file_id in kb_file_ids:
+            found_index = -1
+            found_file = None
+            for i, f in enumerate(files):
+                if f.get("kb_file_id") == kb_file_id:
+                    found_index = i
+                    found_file = f
+                    break
+            if found_index == -1:
+                raise ValueError(f"文件不存在: {kb_file_id}")
+            targets.append((found_index, found_file))
+
+        from pathlib import Path
+
+        backups = []
+        try:
+            for _, file_info in targets:
+                # ========== 修改：相对路径转绝对路径 ==========
+                relative_path = file_info["path"].lstrip("/")
+                file_path = PROJECT_ROOT.parent / relative_path
+                # ============================================
+                if file_path.exists():
+                    backup_path = file_path.with_suffix(file_path.suffix + ".bak")
+                    file_path.rename(backup_path)
+                    backups.append((file_path, backup_path))
+        except Exception as e:
+            for orig_path, bak_path in backups:
+                if bak_path.exists():
+                    try:
+                        bak_path.rename(orig_path)
+                    except Exception:
+                        pass
+            raise RuntimeError(f"备份文件失败: {str(e)}")
+
+        original_files = meta["files"].copy()
+        for index, _ in sorted(targets, key=lambda x: x[0], reverse=True):
+            meta["files"].pop(index)
+        meta["updated_at"] = _now()
+
+        try:
+            with open(meta_path, "w", encoding="utf-8") as f:
+                json.dump(meta, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            meta["files"] = original_files
+            meta["updated_at"] = _now()
+            try:
+                with open(meta_path, "w", encoding="utf-8") as f:
+                    json.dump(meta, f, ensure_ascii=False, indent=2)
+            except Exception as rollback_error:
+                raise RuntimeError(f"更新 meta 失败: {str(e)}，且回滚 meta 失败: {str(rollback_error)}")
+
+            for orig_path, bak_path in backups:
+                if bak_path.exists():
+                    try:
+                        bak_path.rename(orig_path)
+                    except Exception:
+                        pass
+            raise RuntimeError(f"更新 meta 失败，已回滚: {str(e)}")
+
+        for _, bak_path in backups:
+            if bak_path.exists():
+                try:
+                    bak_path.unlink()
+                except Exception:
+                    pass
+
+        return {
+            "kb_id": kb_id,
+            "deleted_count": len(kb_file_ids),
+            "kb_file_ids": kb_file_ids,
+            "deleted": True
+        }
 
 
-# 单例实例（全局使用）
 kb_service = KBService()

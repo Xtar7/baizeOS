@@ -19,13 +19,13 @@ def upload_to_kb():
         if not kb_id:
             return jsonify({"error": "缺少 kb_id 参数"}), 400
 
-        # 调用 upload_service，传入 kb_id（现在是 uuid）
+        # 直接调用并返回 upload_service 的结果
         result = upload_service.save_and_index(file, kb_id=kb_id)
 
         return jsonify({
             "message": "上传成功",
             "kb_id": kb_id,
-            "file_info": result  # 可选：返回更多文件信息
+            "file_info": result   # 这里 result 已经包含 kb_file_id 等字段
         }), 201
 
     except ValueError as ve:
