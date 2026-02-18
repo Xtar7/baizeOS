@@ -7,12 +7,10 @@ from app.services.kb_service import kb_service
 from app.services.rag_service import rag_service
 from app.rag.parser import DocumentParser
 
-
 ALLOWED_EXTENSIONS = {".txt", ".md", ".pdf"}
 
 KB_ROOT = PROJECT_ROOT / "knowledge_base"
 KB_ROOT.mkdir(parents=True, exist_ok=True)
-
 
 class UploadService:
     def __init__(self):
@@ -50,7 +48,7 @@ class UploadService:
         latest_file = meta["files"][-1]
         # ========== 修改：相对路径转绝对路径 ==========
         relative_path = latest_file["path"].lstrip("/")
-        save_path = PROJECT_ROOT.parent / relative_path
+        save_path = PROJECT_ROOT / relative_path  # 修复：移除 .parent，使用 PROJECT_ROOT
         # ============================================
 
         # MIME 校验
@@ -73,6 +71,5 @@ class UploadService:
             "bytes": save_path.stat().st_size,
             "created_at": latest_file["created_at"]
         }
-
 
 upload_service = UploadService()

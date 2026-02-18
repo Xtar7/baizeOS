@@ -219,3 +219,8 @@ knowledge_base/
 
 # Backend data folder
 backend/data/
+
+# Models folders
+models/llms/
+models/embedding/
+models/ocr/

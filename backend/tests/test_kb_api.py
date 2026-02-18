@@ -19,7 +19,6 @@ test_data = {
     "kb_file_ids": []
 }
 
-
 def print_response(response, title):
     """打印响应信息"""
     print(f"\n{'=' * 60}")
@@ -32,16 +31,14 @@ def print_response(response, title):
     print(f"{'=' * 60}")
     return response
 
-
 def is_success(status_code):
     """判断请求是否成功（2xx）"""
     return 200 <= status_code < 300
 
-
 def create_temp_file(content, suffix=".txt"):
     """创建临时文件（跨平台兼容）"""
     temp_dir = Path(tempfile.gettempdir())
-    temp_file = temp_dir / f"test_{int(time.time())}_{suffix.lstrip('.')}{suffix}"
+    temp_file = temp_dir / f"test_{int(time.time())}{suffix}"  # 修复：移除 _{suffix.lstrip('.')}，避免双后缀如 _txt.txt
     temp_file.write_text(content, encoding='utf-8')
     return temp_file
 
@@ -138,44 +135,42 @@ def test_update_kb():
 
 
 def test_upload_file():
-    """测试上传文件到知识库（使用 /upload 路由）"""
+    """测试上传单个文件"""
     if not test_data["kb_id"]:
         print("⚠️ 跳过：没有 kb_id")
         return False
 
     print(f"\n>>> 测试上传文件到知识库: {test_data['kb_id']}")
 
-    # 创建临时测试文件（跨平台）
-    test_file_path = create_temp_file("这是一个测试文件内容。\n用于测试文件上传功能。")
+    content = f"测试文件内容_{int(time.time())}"
+    temp_file = create_temp_file(content, ".txt")
+    filename = temp_file.name
 
     try:
-        with open(test_file_path, "rb") as f:
-            files = {"file": ("test_upload.txt", f, "text/plain")}
-            data = {"kb_id": test_data["kb_id"]}  # form-data 传 kb_id
+        with open(temp_file, "rb") as f:
+            files = {"file": (filename, f)}
+            data = {"kb_id": test_data["kb_id"]}
             response = requests.post(KB_UPLOAD_API, files=files, data=data)
-
-        print_response(response, "上传文件")
+        print_response(response, "上传单个文件")
 
         if is_success(response.status_code):
-            result = response.json()
-            file_info = result.get("file_info", {})
-            kb_file_id = file_info.get("kb_file_id")
-            if kb_file_id:
-                test_data["kb_file_ids"].append(kb_file_id)
-                print(f"✅ 上传成功，kb_file_id: {kb_file_id}")
+            data = response.json()
+            file_info = data.get("file_info")
+            if file_info and "kb_file_id" in file_info:
+                test_data["kb_file_ids"].append(file_info["kb_file_id"])
+                print(f"✅ 上传成功，kb_file_id: {file_info['kb_file_id']}")
                 return True
             else:
-                # 尝试从其他字段获取
-                print(f"⚠️ 响应中未找到 kb_file_id，file_info: {file_info}")
+                print("❌ 响应缺少 file_info 或 kb_file_id")
                 return False
         else:
             print("❌ 上传失败")
             return False
-
     finally:
-        # 确保临时文件被删除
-        test_file_path.unlink(missing_ok=True)
+        if temp_file.exists():
+            temp_file.unlink()  # 添加：清理临时文件
 
+# 类似微调 test_upload_multiple_files：添加 finally unlink
 
 def test_upload_multiple_files():
     """测试上传多个文件"""
@@ -183,35 +178,42 @@ def test_upload_multiple_files():
         print("⚠️ 跳过：没有 kb_id")
         return False
 
-    print(f"\n>>> 测试上传多个文件")
+    print(f"\n>>> 测试上传多个文件到知识库: {test_data['kb_id']}")
 
     success_count = 0
-    for i in range(2):
-        test_file_path = create_temp_file(f"测试文件 {i} 的内容。")
+    temp_files = []
+    for i in range(3):
+        content = f"测试文件_{i}_{int(time.time())}"
+        temp_file = create_temp_file(content, ".txt")
+        temp_files.append(temp_file)
+        filename = temp_file.name
 
         try:
-            with open(test_file_path, "rb") as f:
-                files = {"file": (f"test_upload_{i}.txt", f, "text/plain")}
+            with open(temp_file, "rb") as f:
+                files = {"file": (filename, f)}
                 data = {"kb_id": test_data["kb_id"]}
                 response = requests.post(KB_UPLOAD_API, files=files, data=data)
+            print_response(response, f"上传文件 {i+1}")
 
             if is_success(response.status_code):
-                result = response.json()
-                file_info = result.get("file_info", {})
-                kb_file_id = file_info.get("kb_file_id")
-                if kb_file_id:
-                    test_data["kb_file_ids"].append(kb_file_id)
-                    print(f"✅ 文件 {i + 1} 上传成功: {kb_file_id}")
+                data = response.json()
+                file_info = data.get("file_info")
+                if file_info and "kb_file_id" in file_info:
+                    test_data["kb_file_ids"].append(file_info["kb_file_id"])
                     success_count += 1
-            else:
-                print(f"❌ 文件 {i + 1} 上传失败: {response.status_code}")
+        except Exception as e:
+            print(f"❌ 上传文件 {i+1} 异常: {str(e)}")
 
-        finally:
-            test_file_path.unlink(missing_ok=True)
+    for tf in temp_files:
+        if tf.exists():
+            tf.unlink()  # 添加：清理所有临时文件
 
-    print(f"当前共有 {len(test_data['kb_file_ids'])} 个测试文件")
-    return success_count > 0
-
+    if success_count == 3:
+        print("✅ 所有文件上传成功")
+        return True
+    else:
+        print(f"❌ {3 - success_count} 个文件上传失败")
+        return False
 
 def test_delete_single_file():
     """测试删除单个文件"""
@@ -333,7 +335,7 @@ def cleanup():
 
     # 删除剩余的文件
     if test_data["kb_id"] and test_data["kb_file_ids"]:
-        for kb_file_id in test_data["kb_file_ids"]:
+        for kb_file_id in test_data["kb_file_ids"][:]:  # 复制列表避免修改时迭代问题
             payload = {
                 "kb_id": test_data["kb_id"],
                 "kb_file_id": kb_file_id
@@ -341,9 +343,10 @@ def cleanup():
             response = requests.delete(FILES_API, json=payload)
             if is_success(response.status_code):
                 print(f"✅ 删除文件: {kb_file_id}")
+                test_data["kb_file_ids"].remove(kb_file_id)  # 成功后移除
             else:
                 print(f"❌ 删除文件失败: {kb_file_id}")
-        print(f"清理了 {len(test_data['kb_file_ids'])} 个文件")
+        print(f"清理了 {len(test_data['kb_file_ids'])} 个文件")  # 现在应为0
 
     # 删除知识库
     if test_data["kb_id"]:
