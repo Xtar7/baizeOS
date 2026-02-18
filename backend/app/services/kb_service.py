@@ -1,5 +1,6 @@
 # backend/app/services/kb_service.py
 import json
+import logging
 import mimetypes
 import shutil
 from pathlib import Path
@@ -11,7 +12,7 @@ from app.config.settings import PROJECT_ROOT
 
 KB_ROOT = PROJECT_ROOT / "knowledge_base"
 KB_ROOT.mkdir(parents=True, exist_ok=True)
-
+logger = logging.getLogger(__name__)
 
 def _now():
     return datetime.utcnow().isoformat()
@@ -60,6 +61,15 @@ class KBService:
         (kb_path / "files").mkdir(parents=True)
         (kb_path / "vector_store").mkdir(exist_ok=True)
 
+        default_model = "bge-small-zh-v1.5"
+        try:
+            from app.services.embedding_service import get_embedding_service
+            svc = get_embedding_service(default_model)
+            embedding_dim = svc.dim
+        except Exception as e:
+            logger.warning(f"无法自动获取默认模型维度，使用 512: {e}")
+            embedding_dim = 512
+
         meta = {
             "kb_id": kb_id,
             "display_name": display_name.strip(),
@@ -67,6 +77,10 @@ class KBService:
             "system_prompt": system_prompt.strip(),
             "created_at": _now(),
             "updated_at": _now(),
+            "embedding_model": default_model,
+            "embedding_dim": embedding_dim,  # ← 自动
+            "last_embedding_model": None,
+            "last_embedding_dim": None,
             "files": []
         }
 
@@ -156,7 +170,12 @@ class KBService:
     # -----------------------------
     # 通用更新（支持部分字段）
     # -----------------------------
-    def update(self, kb_id: str, display_name: str = None, system_prompt: str = None, description: str = None):
+    def update(self, kb_id: str,
+               display_name: str = None,
+               system_prompt: str = None,
+               description: str = None,
+               embedding_model: str = None,  # ← 新增这个参数
+               embedding_dim: int = None):  # ← 可选也加这个
         meta_path = self._meta_path(kb_id)
         if not meta_path.exists():
             raise ValueError("知识库不存在")
@@ -180,6 +199,21 @@ class KBService:
             meta["description"] = description.strip()
             updated = True
 
+        # 新增：支持更新 embedding_model
+        if embedding_model is not None:
+            cleaned_model = embedding_model.strip()
+            if cleaned_model:
+                meta["embedding_model"] = cleaned_model
+                updated = True
+
+        # 可选：支持直接更新 dim（但通常由系统自动算）
+        if embedding_dim is not None:
+            try:
+                meta["embedding_dim"] = int(embedding_dim)
+                updated = True
+            except:
+                pass
+
         if not updated:
             raise ValueError("没有提供任何要更新的字段")
 
@@ -189,6 +223,16 @@ class KBService:
             json.dump(meta, f, ensure_ascii=False, indent=2)
 
         return meta
+
+    def update_last_embedding_info(self, kb_id: str, model_name: str, dim: int):
+        meta = self.get(kb_id)
+        if not meta:
+            return
+        meta["last_embedding_model"] = model_name
+        meta["last_embedding_dim"] = dim
+        meta["updated_at"] = _now()
+        with open(self._meta_path(kb_id), "w", encoding="utf-8") as f:
+            json.dump(meta, f, ensure_ascii=False, indent=2)
 
     # -----------------------------
     # 保存文件到知识库（由 upload_service 调用）

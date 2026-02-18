@@ -1,9 +1,10 @@
 # backend/app/__init__.py
 from flask import Flask
 from flask_cors import CORS
-
 from app.api import register_blueprints
+from app.config.settings import PROJECT_ROOT
 
+EMBEDDING_ROOT = PROJECT_ROOT / "models" / "embedding"
 
 def create_app(config=None):
     """
@@ -20,8 +21,9 @@ def create_app(config=None):
     # =============================================
     # 基本配置
     # =============================================
-    app.config['ENV'] = 'development' if __debug__ else 'production'
-    app.config['DEBUG'] = __debug__
+    from app.config.settings import DEBUG, ENV
+    app.config['DEBUG'] = DEBUG
+    app.config['ENV'] = 'development' if DEBUG else 'production'
     app.config['SECRET_KEY'] = 'your-secret-key-change-me'  # 生产环境请改成安全的随机值
 
     # =============================================
@@ -32,6 +34,16 @@ def create_app(config=None):
         supports_credentials=True,
         resources={r"/api/*": {"origins": "*"}},  # 开发阶段可用 *，上线请收紧
     )
+
+    # =============================================
+    # 延迟导入并扫描 Embedding 模型（避免循环导入）
+    # =============================================
+    try:
+        from app.services.embedding_service import scan_embedding_models
+        scan_embedding_models(EMBEDDING_ROOT)
+        print("[启动] Embedding 模型扫描完成")
+    except Exception as e:
+        print(f"[警告] Embedding 模型扫描失败: {e}")
 
     # =============================================
     # 注册所有蓝图

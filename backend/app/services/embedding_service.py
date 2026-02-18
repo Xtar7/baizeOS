@@ -1,12 +1,95 @@
 # backend/app/services/embedding_service.py
+# Embedding 模型扫描、缓存、获取服务
+import os
+import logging
+from pathlib import Path
+from typing import Dict, List
+
 from sentence_transformers import SentenceTransformer
+from app.rag.embedding import EmbeddingService
 
-class EmbeddingService:
-    def __init__(self):
-        self.model = SentenceTransformer("BAAI/bge-small-zh")
+logger = logging.getLogger(__name__)
 
-    def embed(self, texts):
-        return self.model.encode(texts).tolist()
+# 全局缓存
+_model_path_cache: Dict[str, str] = {}
+_model_dim_cache: Dict[str, int] = {}
+DEFAULT_MODEL_NAME = "bge-small-zh-v1.5"
+DEFAULT_MODEL_PATH = r"\baizeOS\models\embedding\bge-small-zh-v1.5"  # 你的实际路径
 
+def scan_embedding_models(embedding_root: str | Path) -> Dict[str, str]:
+    global _model_path_cache, _model_dim_cache
 
-embedding_service = EmbeddingService()
+    embedding_root = Path(embedding_root).resolve()
+    if not embedding_root.is_dir():
+        logger.warning(f"embedding 根目录不存在: {embedding_root}")
+        return {}
+
+    new_cache = {}
+    new_dim_cache = {}
+
+    for subdir in embedding_root.iterdir():
+        if not subdir.is_dir():
+            continue
+        model_name = subdir.name.strip()
+        if not model_name:
+            continue
+
+        config_path = subdir / "config.json"
+        has_weight = any((subdir / f).exists() for f in ["pytorch_model.bin", "model.safetensors"])
+
+        if config_path.exists() and has_weight:
+            abs_path = str(subdir.resolve())
+            new_cache[model_name] = abs_path
+
+            # 尝试从 config 预读 dim
+            try:
+                import json
+                with open(config_path, "r", encoding="utf-8") as f:
+                    config = json.load(f)
+                dim = config.get("hidden_size") or config.get("dim") or config.get("embedding_dim")
+                if dim:
+                    new_dim_cache[model_name] = int(dim)
+            except Exception as e:
+                logger.debug(f"无法预读 dim ({model_name}): {e}")
+
+    if new_cache:
+        _model_path_cache = new_cache
+        _model_dim_cache = new_dim_cache
+        logger.info(f"扫描到 {len(new_cache)} 个有效 embedding 模型: {list(new_cache.keys())}")
+    else:
+        logger.warning("未扫描到任何有效 embedding 模型")
+
+    return new_cache
+
+def get_available_embedding_models() -> List[Dict[str, any]]:
+    models = []
+    for name, path in _model_path_cache.items():
+        dim = _model_dim_cache.get(name)
+        models.append({
+            "name": name,
+            "path": path,
+            "dim": dim if dim is not None else "未知",
+            "is_default": name == DEFAULT_MODEL_NAME
+        })
+    return models
+
+def get_embedding_service(model_name: str) -> EmbeddingService:
+    path = _model_path_cache.get(model_name)
+    if not path or not os.path.isdir(path):
+        logger.warning(f"模型 {model_name} 路径无效，使用默认 {DEFAULT_MODEL_NAME}")
+        path = DEFAULT_MODEL_PATH
+        model_name = DEFAULT_MODEL_NAME
+
+    try:
+        svc = EmbeddingService(model_name_or_path=path)
+        logger.debug(f"成功加载模型: {model_name} (dim={svc.dim})")
+        return svc
+    except Exception as e:
+        logger.error(f"本地模型 {model_name} 加载失败: {str(e)}")
+        try:
+            svc = EmbeddingService(default_model="BAAI/bge-small-zh-v1.5")
+            logger.info("fallback 到在线 bge-small-zh-v1.5 成功")
+            return svc
+        except Exception as online_err:
+            logger.critical(f"在线模型也失败: {str(online_err)}")
+            raise RuntimeError("所有 embedding 模型加载失败，请检查路径和网络")

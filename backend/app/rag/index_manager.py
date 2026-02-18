@@ -6,7 +6,7 @@ from app.config.settings import KB_DIR
 
 
 class IndexManager:
-    def __init__(self, dim=768):
+    def __init__(self, dim):
         self.dim = dim
         self.index = None
         self.text_store = []
@@ -37,7 +37,7 @@ class IndexManager:
         if index_path.exists():
             self.index = faiss.read_index(str(index_path))
         else:
-            self.index = faiss.IndexFlatL2(self.dim)
+            self.index = faiss.IndexFlatIP(self.dim)
 
         if store_path.exists():
             with open(store_path, "rb") as f:
@@ -76,6 +76,9 @@ class IndexManager:
 
         if self.index.ntotal == 0:
             return []
+
+        # 添加归一化（确保 query 与 index 的向量在同一尺度）
+        query_vec = faiss.normalize_L2(query_vec.reshape(1, -1))  # ← 加这行
 
         D, I = self.index.search(query_vec, top_k)
 

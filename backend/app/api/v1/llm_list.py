@@ -1,13 +1,13 @@
-# backend/app/api/v1/models.py
+# backend/app/api/v1/llm_list.py
 from flask import Blueprint, jsonify
 import time
 
 from app.services.llm_service import llm_service
 
-models_bp = Blueprint("models", __name__, url_prefix="/v1")
+llm_list_bp = Blueprint("models", __name__, url_prefix="/v1")
 
 
-@models_bp.route("/models", methods=["GET"])
+@llm_list_bp.route("/models", methods=["GET"])
 def list_models():
     model_list = []
 
