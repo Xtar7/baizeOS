@@ -224,3 +224,8 @@ backend/data/
 models/llms/
 models/embedding/
 models/ocr/
+
+# Documentation folders
+文档/
+docs/
+documentation/

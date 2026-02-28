@@ -8,3 +8,8 @@ dependencies = [
     "flask>=3.1.2",
     "sentence-transformers>=5.2.3",
 ]
+
+[[tool.uv.index]]
+name = "aliyun"
+url = "https://mirrors.aliyun.com/pypi/simple/"
+#url = "http://mirrors.cloud.aliyuncs.com/pypi/simple/" # 内网

@@ -9,6 +9,8 @@ import logging
 from pathlib import Path
 from typing import Dict, List, Optional
 
+from app.config.settings import PROJECT_ROOT  # 导入 PROJECT_ROOT 以修正路径
+
 logger = logging.getLogger(__name__)
 
 # 全局缓存（模块级别）
@@ -16,8 +18,7 @@ _model_path_cache: Dict[str, str] = {}
 _model_dim_cache: Dict[str, int] = {}
 
 DEFAULT_MODEL_NAME = "bge-small-zh-v1.5"
-# 注意：这里使用你项目中真实的默认路径，建议从配置读取
-DEFAULT_MODEL_PATH = r"\baizeOS\models\embedding\bge-small-zh-v1.5"  # 请替换成实际路径或从配置读取
+DEFAULT_MODEL_PATH = str(PROJECT_ROOT / "models" / "embedding" / DEFAULT_MODEL_NAME)
 
 
 def scan_embedding_models(embedding_root: str | Path) -> Dict[str, str]:
@@ -81,13 +82,18 @@ def get_available_embedding_models() -> List[Dict[str, any]]:
     return models
 
 
-def get_embedding_service(model_name: str = None) -> 'EmbeddingService':
-    from app.rag.embedding import EmbeddingService   # ← 移到这里
+def get_embedding_service(model_name: str = None) -> 'EmbeddingService':  # 延迟类型提示
+    from app.rag.embedding import EmbeddingService  # 延迟导入（避免循环）
 
     if not model_name:
         model_name = DEFAULT_MODEL_NAME
 
     path = _model_path_cache.get(model_name)
+
+    # 新增：如果缓存有默认模型，优先用它，避免无效路径
+    if not path and model_name == DEFAULT_MODEL_NAME and DEFAULT_MODEL_NAME in _model_path_cache:
+        path = _model_path_cache[DEFAULT_MODEL_NAME]
+        logger.info(f"使用缓存中的默认模型路径: {path}")
 
     if not path or not os.path.isdir(path):
         logger.warning(f"模型 {model_name} 路径无效，使用默认 {DEFAULT_MODEL_NAME}")

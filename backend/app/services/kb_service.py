@@ -63,7 +63,7 @@ class KBService:
 
         default_model = "bge-small-zh-v1.5"
         try:
-            from app.services.embedding_service import get_embedding_service
+            from app.services.embedding_factory import get_embedding_service
             svc = get_embedding_service(default_model)
             embedding_dim = svc.dim
         except Exception as e:

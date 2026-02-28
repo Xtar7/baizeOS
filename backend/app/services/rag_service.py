@@ -6,7 +6,7 @@ from app.rag.index_manager import IndexManager
 from app.rag.retriever import Retriever
 from app.services.llm_service import llm_service
 from app.services.kb_service import kb_service
-from app.services.embedding_service import get_embedding_service  # ← 关键导入
+from app.services.embedding_factory import get_embedding_service  # ← 关键导入
 from app.rag.chunker import chunk_text
 from app.config.settings import CHUNK_SIZE, CHUNK_OVERLAP
 
@@ -128,9 +128,21 @@ class RAGService:
 
         # 4. 生成向量（支持批量）
         try:
-            vectors = embedding_svc.embed(chunks)  # embed 已支持 list[str]
+            embeddings = embedding_svc.embed(chunks)
+            print("[DEBUG-ingest] embed 返回类型:", type(embeddings))
+            print("[DEBUG-ingest] embed shape:",
+                  embeddings.shape if hasattr(embeddings, 'shape') else "no shape")
+
+            if isinstance(embeddings, list):
+                import numpy as np
+                embeddings = np.array(embeddings)
+
+            vectors = embeddings.astype("float32")
+
+            if vectors.ndim == 1:
+                vectors = vectors.reshape(1, -1)
             if len(vectors) != len(chunks):
-                raise RuntimeError("向量数量与 chunk 不匹配")
+                raise RuntimeError(f"向量数量不匹配: {len(vectors)} vs {len(chunks)} chunks")
             if vectors.shape[1] != actual_dim:
                 raise RuntimeError(f"维度不匹配：预期 {actual_dim}，实际 {vectors.shape[1]}")
         except Exception as e:

@@ -27,6 +27,6 @@ if __name__ == "__main__":
     app.run(
         host="0.0.0.0",
         port=5000,
-        debug=False,          # ← 你想要随时改 debug 就直接在这里改这一行
-        use_reloader=False,
+        debug=True,          # ← 你想要随时改 debug 就直接在这里改这一行
+        use_reloader=True,
     )

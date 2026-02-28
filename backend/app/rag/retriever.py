@@ -15,7 +15,7 @@ class Retriever:
     def _get_embedding(self, kb_id: str):
         if self.embedding is None:
             # 这里才导入（延迟到真正需要时）
-            from app.services.embedding_service import get_embedding_service
+            from app.services.embedding_factory import get_embedding_service
 
             meta = kb_service.get(kb_id)   # kb_service 也建议延迟，如果它也参与循环
             if not meta:

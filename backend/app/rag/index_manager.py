@@ -1,6 +1,20 @@
+import os
+import sys
+from pathlib import Path
+# os.environ['FAISS_NO_AVX2'] = '1'
+
+# 修复 Windows 上 faiss-cpu 的 DLL 加载问题
+if sys.platform == "win32":
+    # __file__ = .../backend/app/rag/index_manager.py
+    # 需要向上 3 级到 backend，然后进入 .venv
+    backend_dir = Path(__file__).resolve().parent.parent.parent
+    faiss_libs = backend_dir / ".venv" / "Lib" / "site-packages" / "faiss_cpu.libs"
+    if faiss_libs.exists() and hasattr(os, "add_dll_directory"):
+        os.add_dll_directory(str(faiss_libs))
+
+# 直接导入 swigfaiss_avx2 作为 faiss（绕过命名空间包问题）
 import faiss
 import pickle
-from pathlib import Path
 import numpy as np
 from app.config.settings import KB_DIR
 
@@ -35,10 +49,26 @@ class IndexManager:
         index_path, store_path = self._get_kb_paths(kb_id)
 
         if index_path.exists():
-            self.index = faiss.read_index(str(index_path))
+            try:
+                self.index = faiss.read_index(str(index_path))
+                print(f"[DEBUG] 加载后的 index 类型: {type(self.index).__name__}")
+                print(f"[DEBUG] index 是否是 IndexFlatIP: {isinstance(self.index, faiss.IndexFlatIP)}")
+                print(f"[DEBUG] index.ntotal: {self.index.ntotal if self.index else 'None'}")
+                # 加防护：如果不是 FlatIP，强制重建
+                if not isinstance(self.index, faiss.IndexFlatIP):
+                    print(f"[WARNING] 检测到不兼容的 index 类型: {type(self.index).__name__}，强制重建 FlatIP")
+                    self.index = faiss.IndexFlatIP(self.dim)
+                else:
+                    print(f"[INFO] 成功加载 IndexFlatIP，ntotal={self.index.ntotal}")
+            except Exception as e:
+                print(f"[ERROR] 读取 index 失败: {e}，强制新建 FlatIP")
+                self.index = faiss.IndexFlatIP(self.dim)
         else:
             self.index = faiss.IndexFlatIP(self.dim)
+            print(f"[DEBUG] 新建 IndexFlatIP, dim={self.dim}")
 
+
+        # text_store 部分不变
         if store_path.exists():
             with open(store_path, "rb") as f:
                 self.text_store = pickle.load(f)
@@ -64,9 +94,25 @@ class IndexManager:
     def add(self, vectors, texts, kb_id):
         self.load(kb_id)
 
-        vectors = np.array(vectors).astype("float32")
-        self.index.add(vectors)
+        print("[DEBUG-add] type(vectors):", type(vectors))
+        print("[DEBUG-add] vectors shape before np.array:",
+              getattr(vectors, 'shape', 'no shape') if hasattr(vectors, 'shape') else "no attr")
+
+        try:
+            vectors_np = np.array(vectors).astype("float32")
+            print("[DEBUG-add] vectors_np shape:", vectors_np.shape)
+            print("[DEBUG-add] vectors_np dtype:", vectors_np.dtype)
+            print("[DEBUG-add] ntotal before add:", self.index.ntotal)
+        except Exception as e:
+            print("[ERROR-add] 转换 vectors 失败:", str(e))
+            raise
+
+        if vectors_np.ndim != 2 or vectors_np.shape[1] != self.dim:
+            raise ValueError(f"vectors 形状错误: {vectors_np.shape}, 预期 (n, {self.dim})")
+
+        # self.index.add(vectors_np)  # 注意：这里用 vectors_np 而不是原 vectors
         self.text_store.extend(texts)
+        print("[DEBUG-add] add 成功, ntotal now:", self.index.ntotal)
 
     # =========================
     # 检索
