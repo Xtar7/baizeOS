@@ -2,19 +2,22 @@
 from app.rag.embedding import EmbeddingService
 from app.rag.index_manager import IndexManager
 from app.services.kb_service import kb_service
-from app.services.embedding_service import get_embedding_service
+from app.services.embedding_factory import get_embedding_service
 import logging
 
 logger = logging.getLogger(__name__)
 
 class Retriever:
     def __init__(self):
-        self.embedding = None           # 延迟加载
-        self.index_managers = {}        # per kb_id 的 IndexManager
+        self.embedding = None
+        self.index_managers = {}
 
-    def _get_embedding(self, kb_id: str) -> EmbeddingService:
+    def _get_embedding(self, kb_id: str):
         if self.embedding is None:
-            meta = kb_service.get(kb_id)
+            # 这里才导入（延迟到真正需要时）
+            from app.services.embedding_service import get_embedding_service
+
+            meta = kb_service.get(kb_id)   # kb_service 也建议延迟，如果它也参与循环
             if not meta:
                 raise ValueError(f"知识库 {kb_id} 不存在")
             model_name = meta.get("embedding_model", "bge-small-zh-v1.5")

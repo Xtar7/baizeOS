@@ -39,7 +39,7 @@ def create_app(config=None):
     # 延迟导入并扫描 Embedding 模型（避免循环导入）
     # =============================================
     try:
-        from app.services.embedding_service import scan_embedding_models
+        from app.services.embedding_factory import scan_embedding_models
         scan_embedding_models(EMBEDDING_ROOT)
         print("[启动] Embedding 模型扫描完成")
     except Exception as e:

@@ -27,8 +27,8 @@ LOG_DIR        = PROJECT_ROOT / "logs"
 # =============================================
 # 运行环境
 # =============================================
-ENV = os.getenv("APP_ENV", "dev")               # dev / test / prod
-DEBUG = os.getenv("FLASK_DEBUG", "1" if ENV in ("dev", "test") else "0") == "1"
+ENV = os.getenv("APP_ENV", "prod")               # dev / test / prod
+DEBUG = os.getenv("FLASK_DEBUG", "0" if ENV in ("dev", "test") else "0") == "1"
 
 SERVER_HOST = "0.0.0.0"
 SERVER_PORT = 5000   # flask默认5000
