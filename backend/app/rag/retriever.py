@@ -42,7 +42,21 @@ class Retriever:
         embedding = self._get_embedding(kb_id)
         query_vec = embedding.embed([query])
         index_manager = self._get_index_manager(kb_id)
-        return index_manager.search(query_vec, kb_id, top_k)
+
+        # 添加调试打印：输出查询信息
+        logger.info(f"[RAG DEBUG] Searching KB: kb_id={kb_id}, query='{query[:50]}...' (top_k={top_k})")
+
+        results = index_manager.search(query_vec, kb_id, top_k)
+
+        # 添加调试打印：输出检索结果
+        if results:
+            logger.info(f"[RAG DEBUG] Retrieved {len(results)} chunks from KB {kb_id}")
+            logger.debug(f"[RAG DEBUG] First chunk preview: {results[0][:100]}...")
+        else:
+            logger.warning(
+                f"[RAG DEBUG] NO chunks retrieved from KB {kb_id}! Check if index is empty or embedding mismatch.")
+
+        return results
 
 # 全局实例（可选保留）
 retriever = Retriever()

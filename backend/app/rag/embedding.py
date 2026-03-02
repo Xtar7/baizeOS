@@ -14,20 +14,24 @@ class EmbeddingService:
         """
         model_name_or_path: 本地绝对路径 或 huggingface 模型名
         """
-        if model_name_or_path and os.path.isdir(model_name_or_path):
-            logger.info(f"加载本地模型: {model_name_or_path}")
-            self.model = SentenceTransformer(model_name_or_path)
-        else:
-            # fallback 到在线模型（仅当本地路径无效时）
-            logger.info(f"加载在线模型 (fallback): {default_model}")
-            self.model = SentenceTransformer(default_model)
+        try:
+            if model_name_or_path and os.path.isdir(model_name_or_path):
+                logger.info(f"加载本地模型: {model_name_or_path}")
+                self.model = SentenceTransformer(model_name_or_path)
+            else:
+                logger.info(f"加载在线模型 (fallback): {default_model}")
+                self.model = SentenceTransformer(default_model)
 
-        dim = self.model.get_sentence_embedding_dimension()
-        if dim is None:
-            raise RuntimeError("无法获取模型维度")
+            dim = self.model.get_sentence_embedding_dimension()
+            if dim is None:
+                raise RuntimeError("无法获取模型维度")
 
-        self.dim = int(dim)
-        logger.info(f"EmbeddingService 初始化完成，维度: {self.dim}")
+            self.dim = int(dim)
+            logger.info(f"EmbeddingService 初始化完成，维度: {self.dim}")
+
+        except Exception as e:
+            logger.error(f"EmbeddingService 初始化失败: {str(e)}", exc_info=True)
+            raise
 
     def embed(self, texts):
         """

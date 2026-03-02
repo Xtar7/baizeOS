@@ -358,6 +358,107 @@ def cleanup():
         else:
             print(f"❌ 清理知识库失败: {test_data['kb_id']}")
 
+# ===============================
+# RAG 验证模块
+# ===============================
+
+CHAT_API = f"{BASE_URL}/v1/chat/completions"
+
+def ask_kb(question, kb_id):
+    payload = {
+        "model": "default",
+        "messages": [
+            {"role": "user", "content": question}
+        ],
+        "kb_id": kb_id
+    }
+    response = requests.post(CHAT_API, json=payload)
+    if 200 <= response.status_code < 300:
+        return response.json()["choices"][0]["message"]["content"]
+    else:
+        print("请求失败:", response.text)
+        return None
+
+
+def test_rag_unique_hit():
+    print("\n>>> 测试唯一知识命中")
+
+    unique_content = "唯一标识：RAG-UNIQUE-998877"
+    temp_file = create_temp_file(unique_content, ".txt")
+
+    try:
+        with open(temp_file, "rb") as f:
+            files = {"file": (temp_file.name, f)}
+            data = {"kb_id": test_data["kb_id"]}
+            r = requests.post(KB_UPLOAD_API, files=files, data=data)
+
+        if not is_success(r.status_code):  # 新增检查
+            print(f"❌ 上传失败: {r.text}")
+            return False
+
+        time.sleep(5)  # 加长到 5 秒，测试是否延迟问题
+
+        answer = ask_kb("唯一标识是什么？", test_data["kb_id"])
+        print("模型回答：", answer)
+
+        if "RAG-UNIQUE-998877" in answer:
+            return True
+        else:
+            print("❌ RAG 未命中，检查服务器日志（retrieve_context 返回 []？）")
+            return False
+
+    finally:
+        if temp_file.exists():
+            temp_file.unlink()
+
+
+def test_rag_delete_invalidation():
+    print("\n>>> 测试删除后是否失效")
+
+    content = "删除测试标识：DEL-112233"
+    temp_file = create_temp_file(content, ".txt")
+
+    try:
+        with open(temp_file, "rb") as f:
+            files = {"file": (temp_file.name, f)}
+            data = {"kb_id": test_data["kb_id"]}
+            r = requests.post(KB_UPLOAD_API, files=files, data=data)
+
+        if not is_success(r.status_code):  # 新增：检查 status
+            print(f"❌ 上传失败: status={r.status_code}, response={r.text}")
+            return False
+
+        try:
+            data = r.json()
+            file_info = data.get("file_info")  # 用 get 避免 KeyError
+            if not file_info:
+                print("❌ 响应缺少 file_info")
+                return False
+            kb_file_id = file_info["kb_file_id"]
+        except Exception as e:
+            print(f"❌ 解析响应失败: {str(e)}, response={r.text}")
+            return False
+
+        time.sleep(2)
+
+        answer1 = ask_kb("删除测试标识是什么？", test_data["kb_id"])
+        print("删除前回答:", answer1)
+
+        requests.delete(FILES_API, json={
+            "kb_id": test_data["kb_id"],
+            "kb_file_id": kb_file_id
+        })
+
+        time.sleep(2)
+
+        answer2 = ask_kb("删除测试标识是什么？", test_data["kb_id"])
+        print("删除后回答:", answer2)
+
+        return "DEL-112233" not in answer2
+
+    finally:
+        if temp_file.exists():
+            temp_file.unlink()
 
 def run_all_tests():
     """运行所有测试"""
@@ -373,6 +474,8 @@ def run_all_tests():
         ("更新知识库", test_update_kb),
         ("上传文件", test_upload_file),
         ("上传多个文件", test_upload_multiple_files),
+        ("RAG 唯一命中测试", test_rag_unique_hit),
+        ("RAG 删除失效测试", test_rag_delete_invalidation),
         ("删除单个文件", test_delete_single_file),
         ("批量删除文件", test_delete_batch_files),
         ("Body 删除知识库", test_delete_kb_by_body),

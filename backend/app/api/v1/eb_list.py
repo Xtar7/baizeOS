@@ -5,7 +5,7 @@ from app.services.embedding_factory import get_available_embedding_models, DEFAU
 
 rag_models_bp = Blueprint("rag_models", __name__, url_prefix="/v1/rag")
 
-@rag_models_bp.route("/embedding/models", methods=["GET"])
+@rag_models_bp.route("/embedding_models", methods=["GET"])
 def list_embedding_models():
     models = get_available_embedding_models()
     return jsonify({
