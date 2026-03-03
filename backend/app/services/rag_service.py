@@ -196,7 +196,7 @@ class RAGService:
     # -----------------------------
     # RAG 主入口（兼容 chat_completions）
     # -----------------------------
-    def rag_chat(self, messages, kb_id=None, stream=False, **kwargs):
+    def rag_chat(self, messages, kb_id=None, stream=False, debug=False, **kwargs):
         rag_messages, full_results = self.build_rag_messages(messages, kb_id=kb_id)
 
         llm_result = llm_service.chat_completions(
@@ -206,36 +206,67 @@ class RAGService:
         )
 
         threshold = 0.3
+
+        # -----------------------------
+        # 构建 references
+        # -----------------------------
         references = [
             {
+                "kb_id": kb_id,
                 "file_id": r["metadata"]["file_id"],
                 "chunk_id": r["metadata"]["chunk_id"],
-                "score": float(r["score"])  # 确保是 float
+                "score": float(r["score"]),
+                "content_preview": r["text"][:200]
             }
             for r in full_results if r.get("score", 0) > threshold
         ]
 
+        # -----------------------------
+        # retrieval metadata
+        # -----------------------------
+        scores = [r.get("score", 0) for r in full_results]
+        retrieval_metadata = {
+            "top_k": len(full_results),
+            "retrieved_count": len(full_results),
+            "min_score": float(min(scores)) if scores else 0.0,
+            "max_score": float(max(scores)) if scores else 0.0,
+            "avg_score": float(sum(scores) / len(scores)) if scores else 0.0,
+            "kb_id": kb_id,
+        }
+
+        # -----------------------------
+        # safety 判断
+        # -----------------------------
+        kb_hit = len(references) > 0
+        hallucination_risk = "low" if kb_hit else "high"
+
+        safety = {
+            "kb_hit": kb_hit,
+            "hallucination_risk": hallucination_risk,
+            "confidence": retrieval_metadata["max_score"]
+        }
+
+        # =============================
+        # 非流式
+        # =============================
         if not stream:
-            # 非流式：兼容不同返回类型
             content = ""
             usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
             model = kwargs.get("model", "unknown")
             finish_reason = "stop"
 
             if isinstance(llm_result, dict):
-                # 如果直接是 dict，提取字段
                 content = llm_result.get("content", "")
                 usage = llm_result.get("usage", usage)
                 model = llm_result.get("model", model)
                 finish_reason = llm_result.get("finish_reason", finish_reason)
+
             elif isinstance(llm_result, str):
-                # 如果是纯 str
                 content = llm_result
+
             elif hasattr(llm_result, '__iter__'):
-                # 如果是生成器，消费它
                 for chunk in llm_result:
                     if isinstance(chunk, dict):
-                        # 假设 chunk 格式类似 OpenAI
                         choice = chunk.get("choices", [{}])[0]
                         delta = choice.get("delta", {}) if choice else {}
                         content += delta.get("content", "")
@@ -247,31 +278,56 @@ class RAGService:
                     elif isinstance(chunk, str):
                         content += chunk
 
-            return {
+            result = {
                 "content": content,
                 "model": model,
                 "finish_reason": finish_reason,
                 "usage": usage,
-                "references": references
+                "references": references,
+                "retrieval_metadata": retrieval_metadata,
+                "safety": safety
             }
 
+            if debug:
+                result["debug"] = {
+                    "retrieved_chunks": full_results,
+                    "final_prompt": rag_messages
+                }
+
+            return result
+
+        # =============================
+        # 流式
+        # =============================
         else:
-            # 流式：返回生成器，但最后一个 chunk 附加 references
             def wrapped_stream():
                 final_usage = None
                 done_detected = False
+
                 for chunk in llm_result:
                     if isinstance(chunk, dict) and "done" in chunk:
                         final_usage = chunk.get("usage")
                         chunk["references"] = references
+                        chunk["retrieval_metadata"] = retrieval_metadata
+                        chunk["safety"] = safety
+
+                        if debug:
+                            chunk["debug"] = {
+                                "retrieved_chunks": full_results,
+                                "final_prompt": rag_messages
+                            }
+
                         done_detected = True
+
                     yield chunk
-                # 如果没有 done chunk，补一个
-                if not done_detected and final_usage is not None:
+
+                if not done_detected:
                     yield {
                         "done": True,
                         "usage": final_usage,
-                        "references": references
+                        "references": references,
+                        "retrieval_metadata": retrieval_metadata,
+                        "safety": safety
                     }
 
             return wrapped_stream()

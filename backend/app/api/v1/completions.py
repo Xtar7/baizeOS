@@ -15,6 +15,8 @@ def chat_completions():
     try:
         data = request.get_json() or {}
 
+        debug = data.get("debug", False)
+
         messages = data.get("messages")
         if not messages or not isinstance(messages, list):
             return jsonify({"error": "messages 必须是非空数组"}), 400
@@ -37,6 +39,7 @@ def chat_completions():
                     messages=messages,
                     kb_id=kb_id,
                     stream=False,
+                    debug=debug,
                     model=model,
                     prompt_name=prompt_name,
                 )
@@ -75,6 +78,7 @@ def chat_completions():
                     messages=messages,
                     kb_id=kb_id,
                     stream=True,
+                    debug=debug,
                     model=model,
                     prompt_name=prompt_name,
                 )
