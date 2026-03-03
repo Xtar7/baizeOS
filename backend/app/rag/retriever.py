@@ -31,11 +31,12 @@ class Retriever:
             self.index_managers[kb_id] = IndexManager(dim=dim)
         return self.index_managers[kb_id]
 
-    def add_documents(self, texts, kb_id="default"):
+    def add_documents(self, docs: list[dict], kb_id="default"):  # 修改：texts -> docs: list[dict]
         embedding = self._get_embedding(kb_id)
+        texts = [d["text"] for d in docs]  # 提取texts用于embed
         vectors = embedding.embed(texts)
         index_manager = self._get_index_manager(kb_id)
-        index_manager.add(vectors, texts, kb_id)
+        index_manager.add(vectors, docs, kb_id)  # 修改：传入docs
         index_manager.save(kb_id)
 
     def search(self, query, kb_id="default", top_k=5):
@@ -46,17 +47,17 @@ class Retriever:
         # 添加调试打印：输出查询信息
         logger.info(f"[RAG DEBUG] Searching KB: kb_id={kb_id}, query='{query[:50]}...' (top_k={top_k})")
 
-        results = index_manager.search(query_vec, kb_id, top_k)
+        results = index_manager.search(query_vec, kb_id, top_k)  # 修改：返回list[dict]
 
         # 添加调试打印：输出检索结果
         if results:
             logger.info(f"[RAG DEBUG] Retrieved {len(results)} chunks from KB {kb_id}")
-            logger.debug(f"[RAG DEBUG] First chunk preview: {results[0][:100]}...")
+            logger.debug(f"[RAG DEBUG] First chunk preview: {results[0]['text'][:100]}...")
         else:
             logger.warning(
                 f"[RAG DEBUG] NO chunks retrieved from KB {kb_id}! Check if index is empty or embedding mismatch.")
 
-        return results
+        return results  # 修改：返回list[dict]
 
 # 全局实例（可选保留）
 retriever = Retriever()

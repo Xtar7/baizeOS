@@ -61,7 +61,8 @@ class UploadService:
             raise ValueError("文件内容解析为空，无法向量化")
 
         # RAG 入库
-        rag_service.ingest_text(text, kb_id=kb_id)
+        # 修改：传入file_id
+        rag_service.ingest_text(text, kb_id=kb_id, file_id=latest_file["kb_file_id"])
 
         return {
             "kb_file_id": latest_file["kb_file_id"],

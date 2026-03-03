@@ -89,7 +89,8 @@ def reindex_kb(kb_id):
                     continue
 
                 # ingest（会自动 chunk、embed、add）
-                result = rag_service.ingest_text(text, kb_id)
+                # 修改：传入file_id
+                result = rag_service.ingest_text(text, kb_id, file_id=file_info["kb_file_id"])
                 total_chunks += result.get("chunks", 0)
                 success_files += 1
 

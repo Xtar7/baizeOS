@@ -65,6 +65,7 @@ def chat_completions():
                 ],
                 "usage": result.get("usage", {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}),
                 "system_fingerprint": None,  # 可选，后续可加模型指纹
+                "references": result.get("references", [])  # 新增：references
             })
 
         # 流式响应
@@ -86,11 +87,13 @@ def chat_completions():
                 )
 
             final_usage = None
+            references = None  # 新增：references
 
             for chunk in token_stream:
                 if isinstance(chunk, dict) and "done" in chunk:
-                    # 最后一块，带 usage
+                    # 最后一块，带 usage 和 references
                     final_usage = chunk.get("usage")
+                    references = chunk.get("references", [])  # 新增
                     yield f"data: {json.dumps({
                         'id': completion_id,
                         'object': 'chat.completion.chunk',
@@ -101,7 +104,8 @@ def chat_completions():
                             'delta': {},
                             'finish_reason': 'stop'
                         }],
-                        'usage': final_usage
+                        'usage': final_usage,
+                        'references': references  # 新增：但stream通常不带顶层references，可调整为最后一块带
                     }, ensure_ascii=False)}\n\n"
                     break
 

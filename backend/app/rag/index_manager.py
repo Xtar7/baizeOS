@@ -1,3 +1,4 @@
+# app/rag/index_manager.py
 import os
 import sys
 from pathlib import Path
@@ -19,7 +20,7 @@ class IndexManager:
     def __init__(self, dim):
         self.dim = dim
         self.index = None
-        self.text_store = []
+        self.doc_store = []  # 修改：从text_store改为doc_store，存储list[dict] with "text" and "metadata"
         self.current_kb = None
 
     # =========================
@@ -31,7 +32,7 @@ class IndexManager:
         vector_dir.mkdir(parents=True, exist_ok=True)
 
         index_path = vector_dir / "index.faiss"
-        store_path = vector_dir / "text_store.pkl"
+        store_path = vector_dir / "doc_store.pkl"  # 修改：从text_store.pkl改为doc_store.pkl
 
         return index_path, store_path
 
@@ -57,12 +58,12 @@ class IndexManager:
         else:
             self.index = faiss.IndexFlatIP(self.dim)
 
-        # 加载 text_store
+        # 加载 doc_store
         if store_path.exists():
             with open(store_path, "rb") as f:
-                self.text_store = pickle.load(f)
+                self.doc_store = pickle.load(f)
         else:
-            self.text_store = []
+            self.doc_store = []
 
         self.current_kb = kb_id
 
@@ -75,12 +76,12 @@ class IndexManager:
         faiss.write_index(self.index, str(index_path))
 
         with open(store_path, "wb") as f:
-            pickle.dump(self.text_store, f)
+            pickle.dump(self.doc_store, f)
 
     # =========================
     # 添加向量
     # =========================
-    def add(self, vectors, texts, kb_id):
+    def add(self, vectors, docs: list[dict], kb_id):  # 修改：texts -> docs: list[dict]
         self.load(kb_id)
 
         try:
@@ -93,7 +94,7 @@ class IndexManager:
 
         # 注意：保持你原有逻辑，不恢复 add
         self.index.add(vectors_np)
-        self.text_store.extend(texts)
+        self.doc_store.extend(docs)  # 修改：extend docs (list[dict])
 
     # =========================
     # 检索
@@ -101,28 +102,16 @@ class IndexManager:
     def search(self, query_vec, kb_id, top_k=5):
         self.load(kb_id)
 
-        # 添加调试打印：输出 index 状态
-        logger.info(f"[INDEX DEBUG] Loaded KB {kb_id}: total vectors = {self.index.ntotal}")
-
-        if self.index.ntotal == 0:
-            logger.warning(f"[INDEX DEBUG] Index for KB {kb_id} is empty! No results.")
-            return []
-
         query_vec = query_vec.astype("float32").reshape(1, -1)
         faiss.normalize_L2(query_vec)
 
         D, I = self.index.search(query_vec, top_k)
 
         results = []
-        for idx in I[0]:
-            if 0 <= idx < len(self.text_store):
-                results.append(self.text_store[idx])
+        for i, idx in enumerate(I[0]):
+            if 0 <= idx < len(self.doc_store):
+                doc = self.doc_store[idx].copy()  # 修改：取dict
+                doc["score"] = D[0][i]  # 添加score (cosine sim, 假设已normalize)
+                results.append(doc)
 
-        # 添加调试打印：输出实际结果
-        if results:
-            logger.info(f"[INDEX DEBUG] Found {len(results)} matching chunks (top_k={top_k})")
-            logger.debug(f"[INDEX DEBUG] First result preview: {results[0][:100]}...")
-        else:
-            logger.warning(f"[INDEX DEBUG] No matching chunks found (distances: {D[0] if D.size > 0 else 'N/A'})")
-
-        return results
+        return results  # 修改：返回list[dict] with "text", "metadata", "score"

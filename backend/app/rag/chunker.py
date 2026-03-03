@@ -13,4 +13,5 @@ def chunk_text(text, chunk_size=500, overlap=50):
             current_chunk = current_chunk[-overlap:] + sent  # overlap 后半部分
     if current_chunk:
         chunks.append(current_chunk.strip())
-    return [c for c in chunks if c]
+    # 修改：返回带chunk_id的list[dict]
+    return [{"text": c, "chunk_id": i} for i, c in enumerate([c for c in chunks if c])]
