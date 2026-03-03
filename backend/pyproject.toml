@@ -2,17 +2,5 @@
 name = "backend"
 version = "0.1.0"
 description = "Add your description here"
-requires-python = ">=3.13"
-dependencies = [
-    "diskcache>=5.6.3",
-    "faiss-cpu==1.13.0",
-    "flask>=3.1.2",
-    "flask-cors>=6.0.2",
-    "requests>=2.32.5",
-    "sentence-transformers>=5.2.3",
-]
-
-[[tool.uv.index]]
-name = "aliyun"
-url = "https://mirrors.aliyun.com/pypi/simple/"
-#url = "http://mirrors.cloud.aliyuncs.com/pypi/simple/" # 内网
+requires-python = ">=3.10"
+dependencies = []

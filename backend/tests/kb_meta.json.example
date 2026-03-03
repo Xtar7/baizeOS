@@ -1,0 +1,22 @@
+{
+  "kb_id": "",
+  "display_name": "",
+  "description": "",
+  "system_prompt": "你是一个企业级知识库问答系统。\n\n【最高优先级规则】\n你必须严格基于系统提供的 Knowledge Base Context 回答问题。\n禁止使用任何模型预训练知识或外部知识。\n\n如果答案未明确出现在 Knowledge Base Context 中，\n必须回答：\n\"未在知识库中找到相关信息。\"\n\n【绝对禁止】\n- 禁止编造\n- 禁止合理推断\n- 禁止补充背景知识\n- 禁止使用常识填充空白\n- 禁止改写专有名词\n\n【专有名词规则】\n知识库中的专有名词必须原样输出。\n不得改写、缩写或翻译。\n\n【相似度规则】\n当上下文匹配度不足时，必须拒绝回答。",
+  "created_at": "",
+  "updated_at": "",
+  "embedding_model": "bge-small-zh-v1.5",
+  "embedding_dim": 512,
+  "last_embedding_model": "bge-small-zh-v1.5",
+  "last_embedding_dim": 512,
+  "files": [
+    {
+      "kb_file_id": "",
+      "filename": "",
+      "path": "",
+      "bytes": ,
+      "created_at": "",
+      "mime_type": "text/plain"
+    }
+  ]
+}
