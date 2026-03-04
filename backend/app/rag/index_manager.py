@@ -110,8 +110,8 @@ class IndexManager:
         results = []
         for i, idx in enumerate(I[0]):
             if 0 <= idx < len(self.doc_store):
-                doc = self.doc_store[idx].copy()  # 修改：取dict
-                doc["score"] = D[0][i]  # 添加score (cosine sim, 假设已normalize)
+                doc = self.doc_store[idx].copy()
+                doc["score"] = float(D[0][i])
                 results.append(doc)
 
         return results  # 修改：返回list[dict] with "text", "metadata", "score"

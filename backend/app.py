@@ -9,9 +9,9 @@ sys.path.insert(0, str(project_root))
 # ------------------------------
 from app import create_app
 from app.services.embedding_factory import scan_embedding_models
-
+from app.utils.json_provider import NumpyJSONProvider
 app = create_app()
-
+app.json = NumpyJSONProvider(app)
 # 启动时打印关键信息
 print("\n=== 系统启动诊断 ===")
 print(f"PROJECT_ROOT: {project_root}")

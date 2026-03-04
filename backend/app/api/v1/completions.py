@@ -1,11 +1,9 @@
 # backend/app/api/v1/completions.py
-from flask import Blueprint, request, jsonify, Response
-import json
-import time
-import uuid
-
+import logging
+from flask import Blueprint, request, jsonify, Response, current_app
 from app.services.llm_service import llm_service
 from app.services.rag_service import rag_service
+logger = logging.getLogger(__name__)
 
 chat_bp = Blueprint("chat", __name__, url_prefix="/v1")
 
@@ -13,126 +11,95 @@ chat_bp = Blueprint("chat", __name__, url_prefix="/v1")
 @chat_bp.route("/chat/completions", methods=["POST"])
 def chat_completions():
     try:
-        data = request.get_json() or {}
+        data = request.get_json(silent=True) or {}
 
-        debug = data.get("debug", False)
-
+        # ========= 参数校验 =========
         messages = data.get("messages")
-        if not messages or not isinstance(messages, list):
+        if not isinstance(messages, list) or not messages:
             return jsonify({"error": "messages 必须是非空数组"}), 400
 
-        stream = data.get("stream", False)
-        model = data.get("model") or "default-model"  # 可设置默认值
+        stream = bool(data.get("stream", False))
+        model = data.get("model")
         prompt_name = data.get("prompt", "default")
-
-        # RAG 参数
-        use_rag = data.get("rag", False)
+        use_rag = bool(data.get("rag", False))
         kb_id = data.get("kb_id")
+        debug = bool(data.get("debug", False))
 
-        completion_id = f"chatcmpl-{uuid.uuid4().hex[:24]}"
-        created_time = int(time.time())
+        # ========= 调用服务层 =========
+        if use_rag and kb_id:
+            result = rag_service.rag_chat(
+                messages=messages,
+                kb_id=kb_id,
+                stream=stream,
+                debug=debug,
+                model=model,
+                prompt_name=prompt_name,
+            )
+        else:
+            result = llm_service.chat_completions(
+                messages=messages,
+                stream=stream,
+                model=model,
+                prompt_name=prompt_name,
+            )
 
+        # ========= 非流式 =========
         if not stream:
-            # 非流式
-            if use_rag and kb_id:
-                result = rag_service.rag_chat(
-                    messages=messages,
-                    kb_id=kb_id,
-                    stream=False,
-                    debug=debug,
-                    model=model,
-                    prompt_name=prompt_name,
-                )
-            else:
-                result = llm_service.chat_completions(
-                    messages=messages,
-                    stream=False,
-                    model=model,
-                    prompt_name=prompt_name,
-                )
+            if not isinstance(result, dict):
+                return jsonify({"error": "响应格式异常"}), 500
 
-            return jsonify({
-                "id": completion_id,
-                "object": "chat.completion",
-                "created": created_time,
-                "model": result.get("model", model),
-                "choices": [
-                    {
-                        "index": 0,
-                        "message": {
-                            "role": "assistant",
-                            "content": result.get("content", "")
-                        },
-                        "finish_reason": result.get("finish_reason", "stop"),
-                    }
-                ],
-                "usage": result.get("usage", {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}),
-                "system_fingerprint": None,  # 可选，后续可加模型指纹
-                "references": result.get("references", [])  # 新增：references
-            })
+            # 统一通过 Flask JSONProvider 输出
+            return jsonify(result)
 
-        # 流式响应
+        # ========= 流式 =========
+        if not hasattr(result, "__iter__"):
+            return jsonify({"error": "流式响应格式异常"}), 500
+
+        def sse_format(payload: dict) -> str:
+            """
+            企业级 SSE 格式封装
+            统一走 Flask JSONProvider
+            """
+            return "data: " + current_app.json.dumps(
+                payload,
+                ensure_ascii=False
+            ) + "\n\n"
+
         def generate():
-            if use_rag and kb_id:
-                token_stream = rag_service.rag_chat(
-                    messages=messages,
-                    kb_id=kb_id,
-                    stream=True,
-                    debug=debug,
-                    model=model,
-                    prompt_name=prompt_name,
-                )
-            else:
-                token_stream = llm_service.chat_completions(
-                    messages=messages,
-                    stream=True,
-                    model=model,
-                    prompt_name=prompt_name,
-                )
+            try:
+                for chunk in result:
 
-            final_usage = None
-            references = None  # 新增：references
+                    if not isinstance(chunk, dict):
+                        continue
 
-            for chunk in token_stream:
-                if isinstance(chunk, dict) and "done" in chunk:
-                    # 最后一块，带 usage 和 references
-                    final_usage = chunk.get("usage")
-                    references = chunk.get("references", [])  # 新增
-                    yield f"data: {json.dumps({
-                        'id': completion_id,
-                        'object': 'chat.completion.chunk',
-                        'created': created_time,
-                        'model': model,
-                        'choices': [{
-                            'index': 0,
-                            'delta': {},
-                            'finish_reason': 'stop'
-                        }],
-                        'usage': final_usage,
-                        'references': references  # 新增：但stream通常不带顶层references，可调整为最后一块带
-                    }, ensure_ascii=False)}\n\n"
-                    break
+                    # 保证最基本字段存在（防止下游炸）
+                    chunk.setdefault("object", "chat.completion.chunk")
 
-                # 普通 chunk
-                delta_content = chunk.get("delta", "") if isinstance(chunk, dict) else str(chunk)
-                yield f"data: {json.dumps({
-                    'id': completion_id,
-                    'object': 'chat.completion.chunk',
-                    'created': created_time,
-                    'model': model,
-                    'choices': [{
-                        'index': 0,
-                        'delta': {'content': delta_content},
-                        'finish_reason': None
-                    }]
-                }, ensure_ascii=False)}\n\n"
+                    yield sse_format(chunk)
 
-            # 结束标志
-            yield "data: [DONE]\n\n"
+                # 标准 OpenAI 结束信号
+                yield "data: [DONE]\n\n"
 
-        return Response(generate(), mimetype="text/event-stream")
+            except Exception as stream_error:
+                error_payload = {
+                    "error": "stream 内部错误",
+                    "detail": str(stream_error)
+                }
+                yield sse_format(error_payload)
 
-    except ValueError as ve:
-        return jsonify({"error": f"参数错误: {str(ve)}"}), 400
+        return Response(
+            generate(),
+            mimetype="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "X-Accel-Buffering": "no"
+            }
+        )
+
     except Exception as e:
-        return jsonify({"error": f"服务器内部错误: {str(e)}"}), 500
+        import traceback
+        logger.error(f"chat_completions 异常: {str(e)}\n{traceback.format_exc()}")
+        return jsonify({
+            "error": "服务器内部错误",
+            "detail": str(e)
+        }), 500
