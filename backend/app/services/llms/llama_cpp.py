@@ -19,7 +19,7 @@ class LlamaCppLLM(BaseLLM):
         try:
             self.llm = Llama(
                 model_path=str(self.model_path),
-                n_ctx=4096,
+                n_ctx=8192,
                 n_gpu_layers=N_GPU_LAYERS,      # 支持 GPU 全 offload
                 n_threads=8,
                 n_batch=512,
