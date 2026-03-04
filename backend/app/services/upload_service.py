@@ -8,8 +8,7 @@ from app.services.rag_service import rag_service
 from app.rag.parser import DocumentParser
 
 ALLOWED_EXTENSIONS = {".txt", ".md", ".pdf"}
-
-KB_ROOT = PROJECT_ROOT / "knowledge_base"
+from app.config.settings import KB_ROOT, KB_DIR
 KB_ROOT.mkdir(parents=True, exist_ok=True)
 
 class UploadService:
@@ -68,7 +67,7 @@ class UploadService:
             "kb_file_id": latest_file["kb_file_id"],
             "kb_id": kb_id,
             "filename": filename,
-            "path": str(save_path),
+            "path": str(latest_file["path"]),
             "bytes": save_path.stat().st_size,
             "created_at": latest_file["created_at"]
         }

@@ -10,7 +10,8 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent   # → E:\b
 BACKEND_DIR    = PROJECT_ROOT / "backend"
 MODEL_DIR      = PROJECT_ROOT / "models"
 LLM_SCAN_PATH  = MODEL_DIR / "llm"
-KB_DIR         = PROJECT_ROOT / "knowledge_base"
+KB_DIR         = PROJECT_ROOT / "KB"
+KB_ROOT        = PROJECT_ROOT / KB_DIR
 LOG_DIR        = PROJECT_ROOT / "logs"
 # 测试data文件夹问题
 # print("settings.py 位置:", Path(__file__).resolve())
@@ -43,8 +44,8 @@ LOG_RAG_DIR = LOG_DIR / "rag"
 # =============================================
 # LLM 配置
 # =============================================
-LLM_SCAN_PATH = MODEL_DIR / "llm"
-DEFAULT_CHAT_MODEL = None               # None 代表启动时自动选择第一个可用模型
+LLM_GGUF_DIR = MODEL_DIR / "llm"               # 只放生成模型 GGUF
+DEFAULT_CHAT_MODEL = "qwen2.5-coder-7b-instruct-q4_k_m"               # None 代表启动时自动选择第一个可用模型
 PROMPT_DIR = PROJECT_ROOT / "config" / "prompts"
 DEFAULT_PROMPT_NAME = "default"     # 提示词配置
 
@@ -59,8 +60,14 @@ VLLM_MODEL_NAME = os.getenv("VLLM_MODEL_NAME", None)                     # 可�
 # Embedding 配置
 # =============================================
 EMBEDDING_SCAN_PATH = MODEL_DIR / "embedding"
-DEFAULT_EMBEDDING = None
+DEFAULT_EMBEDDING = "bge-small-zh-v1.5"
 EMBEDDING_BACKENDS = ["gguf", "huggingface"]
+EMBEDDING_GGUF_SCAN_PATH = MODEL_DIR / "embedding_gguf"  # 新增：GGUF embedding 扫描目录
+EMBEDDING_GGUF_DIR = MODEL_DIR / "embedding_gguf"  # 新增：专门放 GGUF 格式的 embedding 模型（可选独立目录，避免混淆）
+DEFAULT_EMBEDDING_MODEL = "bge-small-zh-v1.5"      # 建议明确默认值（而不是 None）
+
+EMBEDDING_SCAN_PATH = str(PROJECT_ROOT / "models" / "embedding")
+EMBEDDING_GGUF_SCAN_PATH = str(PROJECT_ROOT / "models" / "embedding" / "gguf")
 
 # RAG chunk 策略（你 capability.yaml 里也是 800/150）
 CHUNK_SIZE = 800
@@ -83,3 +90,9 @@ ALLOWED_TEXT_TYPES = ["txt", "md", "pdf"]   # 如果后续想支持 pdf 可以�
 # =============================================
 STRICT_CAPABILITY_CHECK = True
 AUTO_REGISTER_MODELS = True
+# 建议新增：GPU 配置（用于 llama.cpp）
+USE_GPU = True                                     # 或从环境变量读取
+N_GPU_LAYERS = -1 if USE_GPU else 0                # -1 = 全 offload 到 GPU
+
+# 建议新增：日志级别控制（方便调试）
+LLAMA_CPP_VERBOSE = False                          # 是否打印 llama.cpp 详细加载日志（生产 False）

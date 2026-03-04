@@ -8,9 +8,8 @@ from datetime import datetime
 import time
 import uuid
 
-from app.config.settings import PROJECT_ROOT
+from app.config.settings import PROJECT_ROOT,KB_ROOT
 
-KB_ROOT = PROJECT_ROOT / "knowledge_base"
 KB_ROOT.mkdir(parents=True, exist_ok=True)
 logger = logging.getLogger(__name__)
 

@@ -3,7 +3,7 @@ import json
 import logging
 import re
 from typing import List, Dict, Any, Generator, Union, Tuple, Optional
-from app.config.settings import PROJECT_ROOT
+from app.config.settings import PROJECT_ROOT,KB_ROOT
 from app.rag.index_manager import IndexManager
 from app.rag.retriever import Retriever
 from app.services.llm_service import llm_service
@@ -11,9 +11,7 @@ from app.services.kb_service import kb_service
 from app.services.embedding_factory import get_embedding_service
 from app.rag.chunker import chunk_text
 from app.config.settings import CHUNK_SIZE, CHUNK_OVERLAP
-
 logger = logging.getLogger(__name__)
-KB_ROOT = PROJECT_ROOT / "knowledge_base"
 
 # ==============================
 # 企业级 RAG 防护配置（集中管理，支持环境变量覆盖）
@@ -21,8 +19,8 @@ KB_ROOT = PROJECT_ROOT / "knowledge_base"
 RAG_GUARD_CONFIG = {
     # 第一层：检索阈值防护
     "enable_score_guard": True,  # 是否启用相似度阈值检查
-    "score_threshold": 0.50,  # 最低相似度阈值（低于此值拒答）
-    "strict_reference_threshold": 0.70,  # 严格引用阈值（高于此值才显示引用）
+    "score_threshold": 0.10,  # 最低相似度阈值（低于此值拒答）
+    "strict_reference_threshold": 0.10,  # 严格引用阈值（高于此值才显示引用）
 
     # 第二层：内容一致性防护
     "enable_consistency_check": True,  # 是否启用生成内容一致性检查

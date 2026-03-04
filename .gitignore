@@ -215,7 +215,7 @@ __marimo__/
 tools/
 
 # Knowledge base folders
-knowledge_base/
+KB/
 
 # Backend data folder
 backend/data/
