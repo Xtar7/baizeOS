@@ -16,7 +16,6 @@ from app.services.llms.base import BaseLLM
 
 class LLMService:
     def __init__(self):
-        print("!!! 使用的是 2025-03-最新版 llm_service.py (有 embedding 过滤) !!!")
         self.models: Dict[str, Path] = {}
         self.active_model_name: str | None = None
         self.active_llm: BaseLLM | None = None
