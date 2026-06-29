@@ -2,7 +2,9 @@
 import logging
 from flask import Blueprint, jsonify, request
 from pathlib import Path
+import shutil
 
+from app.config.settings import DEFAULT_EMBEDDING_MODEL, PROJECT_ROOT
 from app.services.kb_service import kb_service
 from app.services.rag_service import rag_service
 from app.services.upload_service import upload_service  # 用于重新 parse 文件
@@ -44,8 +46,8 @@ def reindex_kb(kb_id):
 
         logger.info(f"开始重建知识库 {kb_id} 的向量，文件数: {len(files)}，force={force}")
 
-        # 获取当前目标模型
-        target_model = meta.get("embedding_model", "bge-small-zh-v1.5")
+        # 获取当前目标模型（统一从 settings 读取默认值）
+        target_model = meta.get("embedding_model", DEFAULT_EMBEDDING_MODEL)
         embedding_svc = get_embedding_service(target_model)
         actual_dim = embedding_svc.dim
 
@@ -62,11 +64,16 @@ def reindex_kb(kb_id):
         # 先清空旧 index（最简单粗暴的方式，避免维度冲突或旧数据残留）
         vector_dir = Path(kb_service._kb_path(kb_id)) / "vector_store"
         if vector_dir.exists():
-            for file in vector_dir.glob("*"):
+            for item in vector_dir.glob("*"):
                 try:
-                    file.unlink()
+                    if item.is_file():
+                        item.unlink()
+                    elif item.is_dir():
+                        shutil.rmtree(item)
+                except PermissionError as e:
+                    logger.warning(f"删除旧向量文件失败: {item} - {e}")
                 except Exception as e:
-                    logger.warning(f"删除旧向量文件失败: {file} - {e}")
+                    logger.error(f"删除旧向量文件异常: {item} - {e}")
         vector_dir.mkdir(parents=True, exist_ok=True)
 
         total_chunks = 0
@@ -74,7 +81,6 @@ def reindex_kb(kb_id):
 
         for file_info in files:
             relative_path = file_info["path"].lstrip("/")
-            from app.config.settings import PROJECT_ROOT
             file_path = Path(PROJECT_ROOT) / relative_path
 
             if not file_path.exists():

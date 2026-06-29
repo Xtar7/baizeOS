@@ -24,7 +24,11 @@ def create_app(config=None):
     from app.config.settings import DEBUG, ENV
     app.config['DEBUG'] = DEBUG
     app.config['ENV'] = 'development' if DEBUG else 'production'
-    app.config['SECRET_KEY'] = 'your-secret-key-change-me'  # 生产环境请改成安全的随机值
+    import os
+    app.config['SECRET_KEY'] = os.getenv(
+        'FLASK_SECRET_KEY',
+        'dev-key-change-in-production'  # 仅开发环境
+    )
 
     # =============================================
     # 跨域支持（前后端分离基本必备）
@@ -32,7 +36,11 @@ def create_app(config=None):
     CORS(
         app,
         supports_credentials=True,
-        resources={r"/api/*": {"origins": "*"}},  # 开发阶段可用 *，上线请收紧
+        resources={
+            r"/v1/*": {"origins": "*"},  # 修正为实际路由前缀 /v1/
+            # 生产环境建议改为：
+            # r"/v1/*": {"origins": ["https://your-domain.com"]}
+        },
     )
 
     # =============================================

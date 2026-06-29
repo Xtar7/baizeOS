@@ -1,12 +1,18 @@
 # backend/app/api/v1/kb/kb_upload.py
 from flask import Blueprint, request, jsonify
+from app.config.settings import MAX_UPLOAD_SIZE_MB
 from app.services.upload_service import upload_service
 
 kb_upload_bp = Blueprint("kb_upload", __name__, url_prefix="/v1/kb")
 
+
 @kb_upload_bp.route("/upload", methods=["POST"])
 def upload_to_kb():
     try:
+        # 前置文件大小校验
+        if request.content_length and request.content_length > MAX_UPLOAD_SIZE_MB * 1024 * 1024:
+            return jsonify({"error": f"文件过大，最大允许 {MAX_UPLOAD_SIZE_MB}MB"}), 413
+
         if "file" not in request.files:
             return jsonify({"error": "未提供文件"}), 400
 
@@ -30,5 +36,7 @@ def upload_to_kb():
 
     except ValueError as ve:
         return jsonify({"error": str(ve)}), 400
+    except FileNotFoundError as ne:
+        return jsonify({"error": str(ne)}), 404
     except Exception as e:
         return jsonify({"error": f"上传失败: {str(e)}"}), 500

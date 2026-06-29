@@ -7,15 +7,22 @@ kb_delete_bp = Blueprint("kb_delete", __name__, url_prefix="/v1/kb")
 
 # ==================== 删除知识库（支持批量）====================
 
-@kb_delete_bp.route("", methods=["DELETE"])
+@kb_delete_bp.route("", methods=["DELETE", "POST"])
 def delete_kb():
     """
-    删除知识库：DELETE /v1/kb
+    删除知识库：支持 DELETE /v1/kb?kb_id=xxx 和 POST /v1/kb {kb_id: "xxx"}
     Body: {"kb_id": "xxx"} 或 {"kb_ids": ["xxx", "yyy"]}
+    Query: ?kb_id=xxx 或 ?kb_ids=xxx&kb_ids=yyy
     """
-    data = request.get_json(silent=True) or {}
-    kb_id = data.get("kb_id")
-    kb_ids = data.get("kb_ids")
+    # 优先从 URL 参数获取（DELETE 友好）
+    kb_id = request.args.get("kb_id")
+    kb_ids = request.args.getlist("kb_ids")
+
+    # 如果没有 URL 参数，从 body 获取
+    if not kb_id and not kb_ids:
+        data = request.get_json(silent=True) or {}
+        kb_id = data.get("kb_id")
+        kb_ids = data.get("kb_ids", [])
 
     # 单条删除
     if kb_id:
@@ -59,22 +66,28 @@ def delete_kb():
 
 # ==================== 删除文件（支持批量）====================
 
-@kb_delete_bp.route("/files", methods=["DELETE"])
+@kb_delete_bp.route("/files", methods=["DELETE", "POST"])
 def delete_files():
     """
-    删除文件：DELETE /v1/kb/files
+    删除文件：支持 DELETE /v1/kb/files?kb_id=xxx&kb_file_id=yyy 和 POST /v1/kb/files
     Body:
       - 单条: {"kb_id": "xxx", "kb_file_id": "yyy"}
       - 批量: {"kb_id": "xxx", "kb_file_ids": ["yyy", "zzz"]}
     """
-    data = request.get_json(silent=True) or {}
-    kb_id = data.get("kb_id")
+    # 优先从 URL 参数获取（DELETE 友好）
+    kb_id = request.args.get("kb_id")
+    kb_file_id = request.args.get("kb_file_id")
+    kb_file_ids = request.args.getlist("kb_file_ids")
+
+    # 如果没有 URL 参数，从 body 获取
+    if not kb_id:
+        data = request.get_json(silent=True) or {}
+        kb_id = data.get("kb_id")
+        kb_file_id = kb_file_id or data.get("kb_file_id")
+        kb_file_ids = kb_file_ids or data.get("kb_file_ids", [])
 
     if not kb_id:
         return jsonify({"error": "缺少 kb_id 参数"}), 400
-
-    kb_file_id = data.get("kb_file_id")
-    kb_file_ids = data.get("kb_file_ids")
 
     # 单条删除
     if kb_file_id:

@@ -3,12 +3,14 @@ import json
 import logging
 import mimetypes
 import shutil
+import threading
 from pathlib import Path
 from datetime import datetime
 import time
 import uuid
+import warnings
 
-from app.config.settings import PROJECT_ROOT,KB_ROOT
+from app.config.settings import PROJECT_ROOT, KB_ROOT, DEFAULT_EMBEDDING_MODEL
 
 KB_ROOT.mkdir(parents=True, exist_ok=True)
 logger = logging.getLogger(__name__)
@@ -20,6 +22,15 @@ def _now():
 class KBService:
     def __init__(self):
         KB_ROOT.mkdir(parents=True, exist_ok=True)
+        self._locks = {}          # kb_id -> Lock
+        self._global_lock = threading.Lock()  # 保护 _locks 字典
+
+    def _get_lock(self, kb_id: str) -> threading.Lock:
+        """获取或创建指定 kb_id 的锁（细粒度锁，按知识库隔离）"""
+        with self._global_lock:
+            if kb_id not in self._locks:
+                self._locks[kb_id] = threading.Lock()
+            return self._locks[kb_id]
 
     def _generate_uuid_v7(self) -> str:
         """
@@ -60,7 +71,7 @@ class KBService:
         (kb_path / "files").mkdir(parents=True)
         (kb_path / "vector_store").mkdir(exist_ok=True)
 
-        default_model = "bge-small-zh-v1.5"
+        default_model = DEFAULT_EMBEDDING_MODEL  # 统一从 settings 读取
         try:
             from app.services.embedding_factory import get_embedding_service
             svc = get_embedding_service(default_model)
@@ -119,52 +130,38 @@ class KBService:
     # -----------------------------
     def delete(self, kb_id: str):
         kb_path = self._kb_path(kb_id)
-        if kb_path.exists():
-            shutil.rmtree(kb_path)
-            return True
-        return False
+        if not kb_path.exists():
+            return False
+
+        # 完整性校验：确保只删除自己的东西
+        expected_meta = kb_path / "kb_meta.json"
+        if not expected_meta.exists():
+            logger.warning(f"KB {kb_id} 目录存在但缺少 meta 文件，可能已被删除: {kb_path}")
+            return False
+
+        # 删除整个 KB 目录（含 files/, vector_store/, kb_meta.json）
+        shutil.rmtree(kb_path)
+        return True
 
     # -----------------------------
-    # 重命名 KB（专用方法）
+    # 重命名 KB（专用方法）[已废弃，使用 update() 代替]
     # -----------------------------
     def rename(self, kb_id: str, new_display_name: str):
-        meta_path = self._meta_path(kb_id)
-        if not meta_path.exists():
-            raise ValueError("知识库不存在")
-
-        with open(meta_path, "r", encoding="utf-8") as f:
-            meta = json.load(f)
-
-        new_name = new_display_name.strip()
-        if not new_name:
-            raise ValueError("新名称不能为空")
-
-        meta["display_name"] = new_name
-        meta["updated_at"] = _now()
-
-        with open(meta_path, "w", encoding="utf-8") as f:
-            json.dump(meta, f, ensure_ascii=False, indent=2)
-
-        return meta
+        warnings.warn(
+            "rename() 已废弃，请使用 update(kb_id, display_name=new_name)",
+            DeprecationWarning, stacklevel=2
+        )
+        return self.update(kb_id, display_name=new_display_name)
 
     # -----------------------------
-    # 更新 system_prompt（专用方法）
+    # 更新 system_prompt（专用方法）[已废弃，使用 update() 代替]
     # -----------------------------
     def update_prompt(self, kb_id: str, new_system_prompt: str):
-        meta_path = self._meta_path(kb_id)
-        if not meta_path.exists():
-            raise ValueError("知识库不存在")
-
-        with open(meta_path, "r", encoding="utf-8") as f:
-            meta = json.load(f)
-
-        meta["system_prompt"] = new_system_prompt.strip()
-        meta["updated_at"] = _now()
-
-        with open(meta_path, "w", encoding="utf-8") as f:
-            json.dump(meta, f, ensure_ascii=False, indent=2)
-
-        return meta
+        warnings.warn(
+            "update_prompt() 已废弃，请使用 update(kb_id, system_prompt=new_prompt)",
+            DeprecationWarning, stacklevel=2
+        )
+        return self.update(kb_id, system_prompt=new_system_prompt)
 
     # -----------------------------
     # 通用更新（支持部分字段）
@@ -179,49 +176,51 @@ class KBService:
         if not meta_path.exists():
             raise ValueError("知识库不存在")
 
-        with open(meta_path, "r", encoding="utf-8") as f:
-            meta = json.load(f)
+        lock = self._get_lock(kb_id)
+        with lock:
+            with open(meta_path, "r", encoding="utf-8") as f:
+                meta = json.load(f)
 
-        updated = False
+            updated = False
 
-        if display_name is not None:
-            new_name = display_name.strip()
-            if new_name:
-                meta["display_name"] = new_name
+            if display_name is not None:
+                new_name = display_name.strip()
+                if new_name:
+                    meta["display_name"] = new_name
+                    updated = True
+
+            if system_prompt is not None:
+                meta["system_prompt"] = system_prompt.strip()
                 updated = True
 
-        if system_prompt is not None:
-            meta["system_prompt"] = system_prompt.strip()
-            updated = True
-
-        if description is not None:
-            meta["description"] = description.strip()
-            updated = True
-
-        # 新增：支持更新 embedding_model
-        if embedding_model is not None:
-            cleaned_model = embedding_model.strip()
-            if cleaned_model:
-                meta["embedding_model"] = cleaned_model
+            if description is not None:
+                meta["description"] = description.strip()
                 updated = True
 
-        # 可选：支持直接更新 dim（但通常由系统自动算）
-        if embedding_dim is not None:
-            try:
-                meta["embedding_dim"] = int(embedding_dim)
-                updated = True
-            except:
-                pass
+            # 新增：支持更新 embedding_model
+            if embedding_model is not None:
+                cleaned_model = embedding_model.strip()
+                if cleaned_model:
+                    meta["embedding_model"] = cleaned_model
+                    updated = True
 
-        if not updated:
-            raise ValueError("没有提供任何要更新的字段")
+            # 可选：支持直接更新 dim（但通常由系统自动算）
+            if embedding_dim is not None:
+                try:
+                    meta["embedding_dim"] = int(embedding_dim)
+                    updated = True
+                except:
+                    pass
 
-        meta["updated_at"] = _now()
+            if not updated:
+                raise ValueError("没有提供任何要更新的字段")
 
-        with open(meta_path, "w", encoding="utf-8") as f:
-            json.dump(meta, f, ensure_ascii=False, indent=2)
+            meta["updated_at"] = _now()
 
-        return meta
+            with open(meta_path, "w", encoding="utf-8") as f:
+                json.dump(meta, f, ensure_ascii=False, indent=2)
+
+            return meta
 
     def update_last_embedding_info(self, kb_id: str, model_name: str, dim: int):
         meta = self.get(kb_id)
@@ -272,16 +271,18 @@ class KBService:
             "mime_type": mimetypes.guess_type(str(save_path))[0] or "application/octet-stream"
         }
 
-        with open(meta_path, "r", encoding="utf-8") as f:
-            meta = json.load(f)
+        lock = self._get_lock(kb_id)
+        with lock:
+            with open(meta_path, "r", encoding="utf-8") as f:
+                meta = json.load(f)
 
-        meta["files"].append(file_info)
-        meta["updated_at"] = _now()
+            meta["files"].append(file_info)
+            meta["updated_at"] = _now()
 
-        with open(meta_path, "w", encoding="utf-8") as f:
-            json.dump(meta, f, ensure_ascii=False, indent=2)
+            with open(meta_path, "w", encoding="utf-8") as f:
+                json.dump(meta, f, ensure_ascii=False, indent=2)
 
-        return meta
+            return meta
 
     # -----------------------------
     # 删除单个文件（带备份回滚）
@@ -291,53 +292,55 @@ class KBService:
         if not meta_path.exists():
             raise ValueError("知识库不存在")
 
-        with open(meta_path, "r", encoding="utf-8") as f:
-            meta = json.load(f)
+        lock = self._get_lock(kb_id)
+        with lock:
+            with open(meta_path, "r", encoding="utf-8") as f:
+                meta = json.load(f)
 
-        files = meta.get("files", [])
-        found_index = -1
-        for i, f in enumerate(files):
-            if f.get("kb_file_id") == kb_file_id:
-                found_index = i
-                break
-        if found_index == -1:
-            raise ValueError(f"文件不存在: {kb_file_id}")
+            files = meta.get("files", [])
+            found_index = -1
+            for i, f in enumerate(files):
+                if f.get("kb_file_id") == kb_file_id:
+                    found_index = i
+                    break
+            if found_index == -1:
+                raise ValueError(f"文件不存在: {kb_file_id}")
 
-        file_info = files[found_index]
-        relative_path = file_info["path"].lstrip("/")
-        file_path = PROJECT_ROOT / relative_path
+            file_info = files[found_index]
+            relative_path = file_info["path"].lstrip("/")
+            file_path = PROJECT_ROOT / relative_path
 
-        backup_path = None
-        if file_path.exists():
-            backup_path = file_path.with_suffix(file_path.suffix + ".bak")
-            file_path.rename(backup_path)
+            backup_path = None
+            if file_path.exists():
+                backup_path = file_path.with_suffix(file_path.suffix + ".bak")
+                file_path.rename(backup_path)
 
-        # 更新 meta
-        files.pop(found_index)
-        meta["updated_at"] = _now()
+            # 更新 meta
+            files.pop(found_index)
+            meta["updated_at"] = _now()
 
-        try:
-            with open(meta_path, "w", encoding="utf-8") as f:
-                json.dump(meta, f, ensure_ascii=False, indent=2)
-        except Exception as e:
+            try:
+                with open(meta_path, "w", encoding="utf-8") as f:
+                    json.dump(meta, f, ensure_ascii=False, indent=2)
+            except Exception as e:
+                if backup_path and backup_path.exists():
+                    try:
+                        backup_path.rename(file_path)
+                    except Exception:
+                        pass
+                raise RuntimeError(f"更新 meta 失败: {str(e)}")
+
             if backup_path and backup_path.exists():
                 try:
-                    backup_path.rename(file_path)
+                    backup_path.unlink()
                 except Exception:
                     pass
-            raise RuntimeError(f"更新 meta 失败: {str(e)}")
 
-        if backup_path and backup_path.exists():
-            try:
-                backup_path.unlink()
-            except Exception:
-                pass
-
-        return {
-            "kb_id": kb_id,
-            "kb_file_id": kb_file_id,
-            "deleted": True
-        }
+            return {
+                "kb_id": kb_id,
+                "kb_file_id": kb_file_id,
+                "deleted": True
+            }
 
     # -----------------------------
     # 批量删除文件（带备份回滚）
@@ -350,80 +353,82 @@ class KBService:
         if not meta_path.exists():
             raise ValueError("知识库不存在")
 
-        with open(meta_path, "r", encoding="utf-8") as f:
-            meta = json.load(f)
+        lock = self._get_lock(kb_id)
+        with lock:
+            with open(meta_path, "r", encoding="utf-8") as f:
+                meta = json.load(f)
 
-        files = meta.get("files", [])
+            files = meta.get("files", [])
 
-        targets = []
-        for kb_file_id in kb_file_ids:
-            found_index = -1
-            found_file = None
-            for i, f in enumerate(files):
-                if f.get("kb_file_id") == kb_file_id:
-                    found_index = i
-                    found_file = f
-                    break
-            if found_index == -1:
-                raise ValueError(f"文件不存在: {kb_file_id}")
-            targets.append((found_index, found_file))
+            targets = []
+            for kb_file_id in kb_file_ids:
+                found_index = -1
+                found_file = None
+                for i, f in enumerate(files):
+                    if f.get("kb_file_id") == kb_file_id:
+                        found_index = i
+                        found_file = f
+                        break
+                if found_index == -1:
+                    raise ValueError(f"文件不存在: {kb_file_id}")
+                targets.append((found_index, found_file))
 
-        backups = []
-        try:
-            for _, file_info in targets:
-                relative_path = file_info["path"].lstrip("/")
-                file_path = PROJECT_ROOT / relative_path
-                if file_path.exists():
-                    backup_path = file_path.with_suffix(file_path.suffix + ".bak")
-                    file_path.rename(backup_path)
-                    backups.append((file_path, backup_path))
-        except Exception as e:
-            for orig_path, bak_path in backups:
-                if bak_path.exists():
-                    try:
-                        bak_path.rename(orig_path)
-                    except Exception:
-                        pass
-            raise RuntimeError(f"备份文件失败: {str(e)}")
+            backups = []
+            try:
+                for _, file_info in targets:
+                    relative_path = file_info["path"].lstrip("/")
+                    file_path = PROJECT_ROOT / relative_path
+                    if file_path.exists():
+                        backup_path = file_path.with_suffix(file_path.suffix + ".bak")
+                        file_path.rename(backup_path)
+                        backups.append((file_path, backup_path))
+            except Exception as e:
+                for orig_path, bak_path in backups:
+                    if bak_path.exists():
+                        try:
+                            bak_path.rename(orig_path)
+                        except Exception:
+                            pass
+                raise RuntimeError(f"备份文件失败: {str(e)}")
 
-        original_files = meta["files"].copy()
-        for index, _ in sorted(targets, key=lambda x: x[0], reverse=True):
-            meta["files"].pop(index)
-        meta["updated_at"] = _now()
-
-        try:
-            with open(meta_path, "w", encoding="utf-8") as f:
-                json.dump(meta, f, ensure_ascii=False, indent=2)
-        except Exception as e:
-            meta["files"] = original_files
+            original_files = meta["files"].copy()
+            for index, _ in sorted(targets, key=lambda x: x[0], reverse=True):
+                meta["files"].pop(index)
             meta["updated_at"] = _now()
+
             try:
                 with open(meta_path, "w", encoding="utf-8") as f:
                     json.dump(meta, f, ensure_ascii=False, indent=2)
-            except Exception as rollback_error:
-                raise RuntimeError(f"更新 meta 失败: {str(e)}，且回滚 meta 失败: {str(rollback_error)}")
+            except Exception as e:
+                meta["files"] = original_files
+                meta["updated_at"] = _now()
+                try:
+                    with open(meta_path, "w", encoding="utf-8") as f:
+                        json.dump(meta, f, ensure_ascii=False, indent=2)
+                except Exception as rollback_error:
+                    raise RuntimeError(f"更新 meta 失败: {str(e)}，且回滚 meta 失败: {str(rollback_error)}")
 
-            for orig_path, bak_path in backups:
+                for orig_path, bak_path in backups:
+                    if bak_path.exists():
+                        try:
+                            bak_path.rename(orig_path)
+                        except Exception:
+                            pass
+                raise RuntimeError(f"更新 meta 失败，已回滚: {str(e)}")
+
+            for _, bak_path in backups:
                 if bak_path.exists():
                     try:
-                        bak_path.rename(orig_path)
+                        bak_path.unlink()
                     except Exception:
                         pass
-            raise RuntimeError(f"更新 meta 失败，已回滚: {str(e)}")
 
-        for _, bak_path in backups:
-            if bak_path.exists():
-                try:
-                    bak_path.unlink()
-                except Exception:
-                    pass
-
-        return {
-            "kb_id": kb_id,
-            "deleted_count": len(kb_file_ids),
-            "kb_file_ids": kb_file_ids,
-            "deleted": True
-        }
+            return {
+                "kb_id": kb_id,
+                "deleted_count": len(kb_file_ids),
+                "kb_file_ids": kb_file_ids,
+                "deleted": True
+            }
 
 
 kb_service = KBService()

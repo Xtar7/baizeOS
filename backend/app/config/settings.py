@@ -10,8 +10,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent   # → E:\b
 BACKEND_DIR    = PROJECT_ROOT / "backend"
 MODEL_DIR      = PROJECT_ROOT / "models"
 LLM_SCAN_PATH  = MODEL_DIR / "llm"
-KB_DIR         = PROJECT_ROOT / "KB"
-KB_ROOT        = PROJECT_ROOT / KB_DIR
+KB_ROOT        = PROJECT_ROOT / "KB"              # 知识库根目录（唯一来源）
 LOG_DIR        = PROJECT_ROOT / "logs"
 # 测试data文件夹问题
 # print("settings.py 位置:", Path(__file__).resolve())
@@ -83,6 +82,7 @@ VECTOR_DIM_AUTO = True
 # 文件上传
 # =============================================
 MAX_UPLOAD_SIZE_MB = 100
+MAX_UPLOAD_SIZE_BYTES = MAX_UPLOAD_SIZE_MB * 1024 * 1024  # 用于代码中直接比较
 ALLOWED_TEXT_TYPES = ["txt", "md", "pdf"]   # 如果后续想支持 pdf 可以加
 
 # =============================================

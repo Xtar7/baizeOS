@@ -5,16 +5,19 @@ from app.services.tmp_service import tmp_service
 tmp_list_bp = Blueprint("tmp_list", __name__, url_prefix="/v1/files")
 
 
-@tmp_list_bp.route("/list", methods=["POST"])
+@tmp_list_bp.route("/list", methods=["GET", "POST"])
 def list_tmp_files():
     """
-    列出临时文件（必须提供 chat_id）
-    POST /v1/files/list
-    Body: { "chat_id": "chat_xxx" }
+    列出临时文件：支持 GET /v1/files/list?chat_id=xxx 和 POST /v1/files/list {chat_id: "xxx"}
     """
     try:
-        data = request.get_json(silent=True) or {}
-        chat_id = data.get("chat_id")
+        # 优先从 URL 参数获取
+        chat_id = request.args.get("chat_id")
+
+        # 如果没有 URL 参数，从 body 获取
+        if not chat_id:
+            data = request.get_json(silent=True) or {}
+            chat_id = data.get("chat_id")
 
         if not chat_id or not isinstance(chat_id, str) or not chat_id.strip():
             return jsonify({"error": "必须提供有效的 chat_id"}), 400

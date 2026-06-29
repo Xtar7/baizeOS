@@ -3,7 +3,7 @@ import json
 import logging
 import re
 from typing import List, Dict, Any, Generator, Union, Tuple, Optional
-from app.config.settings import PROJECT_ROOT,KB_ROOT
+from app.config.settings import PROJECT_ROOT, KB_ROOT, DEFAULT_EMBEDDING_MODEL, CHUNK_SIZE, CHUNK_OVERLAP
 from app.rag.index_manager import IndexManager
 from app.rag.retriever import Retriever
 from app.services.llm_service import llm_service
@@ -48,10 +48,22 @@ class RAGService:
     def __init__(self):
         self.retriever = Retriever()
         self.guard_config = RAG_GUARD_CONFIG  # 允许实例级覆盖
+        self._index_managers = {}  # kb_id -> IndexManager 缓存
 
     # -----------------------------
     # 配置管理
     # -----------------------------
+    def _get_index_manager(self, kb_id: str, dim: int):
+        """获取或创建缓存的 IndexManager 实例"""
+        if kb_id not in self._index_managers:
+            self._index_managers[kb_id] = IndexManager(dim=dim)
+        else:
+            # 如果 dim 变了（切换模型），重建
+            existing = self._index_managers[kb_id]
+            if existing.dim != dim:
+                self._index_managers[kb_id] = IndexManager(dim=dim)
+        return self._index_managers[kb_id]
+
     def update_guard_config(self, **kwargs) -> Dict[str, Any]:
         """动态更新防护配置（用于A/B测试或特殊场景）"""
         self.guard_config.update(kwargs)
@@ -277,7 +289,7 @@ class RAGService:
         if not meta:
             raise ValueError(f"知识库 {kb_id} 不存在")
 
-        target_model = meta.get("embedding_model", "bge-small-zh-v1.5")
+        target_model = meta.get("embedding_model", DEFAULT_EMBEDDING_MODEL)
 
         # 2. 获取 embedding 服务（全局缓存，延迟加载）
         try:
@@ -330,9 +342,9 @@ class RAGService:
             logger.error(f"生成向量失败: {str(e)}")
             raise
 
-        # 5. 添加到 index
+        # 5. 添加到 index（使用缓存的 IndexManager）
         try:
-            index_manager = IndexManager(dim=actual_dim)
+            index_manager = self._get_index_manager(kb_id, actual_dim)
             index_manager.add(vectors, docs, kb_id)
             index_manager.save(kb_id)
         except Exception as e:

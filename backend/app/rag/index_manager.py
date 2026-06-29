@@ -14,7 +14,7 @@ if sys.platform == "win32":
 import faiss  # 这会加载完整的包装层，包括 normalize_L2
 import pickle
 import numpy as np
-from app.config.settings import KB_DIR
+from app.config.settings import KB_ROOT
 
 class IndexManager:
     def __init__(self, dim):
@@ -27,7 +27,7 @@ class IndexManager:
     # 路径管理
     # =========================
     def _get_kb_paths(self, kb_id):
-        kb_root = KB_DIR / kb_id
+        kb_root = KB_ROOT / kb_id
         vector_dir = kb_root / "vector_store"
         vector_dir.mkdir(parents=True, exist_ok=True)
 

@@ -5,12 +5,10 @@ from app.services.tmp_service import tmp_service
 tmp_delete_bp = Blueprint("tmp_delete", __name__, url_prefix="/v1/files")
 
 
-@tmp_delete_bp.route("/delete", methods=["POST"])
+@tmp_delete_bp.route("/delete", methods=["POST", "DELETE"])
 def delete_tmp_files():
     """
-    删除临时文件（必须同时提供 chat_id 和 tmp_file_id / tmp_file_ids）
-
-    POST /v1/files/delete
+    删除临时文件：支持 POST /v1/files/delete 和 DELETE /v1/files/delete?chat_id=xxx&tmp_file_id=yyy
 
     Body 示例：
     单个文件：
@@ -24,13 +22,22 @@ def delete_tmp_files():
       "chat_id": "chat_xxx",
       "tmp_file_ids": ["id1", "id2", "id3"]
     }
+
+    URL 参数示例（DELETE 友好）：
+    DELETE /v1/files/delete?chat_id=chat_xxx&tmp_file_id=abc123
     """
     try:
-        data = request.get_json(silent=True) or {}
+        # 优先从 URL 参数获取
+        chat_id = request.args.get("chat_id")
+        tmp_file_id = request.args.get("tmp_file_id")
+        tmp_file_ids = request.args.getlist("tmp_file_ids")
 
-        chat_id = data.get("chat_id")
-        tmp_file_id = data.get("tmp_file_id")
-        tmp_file_ids = data.get("tmp_file_ids")
+        # 如果没有 URL 参数，从 body 获取
+        if not chat_id:
+            data = request.get_json(silent=True) or {}
+            chat_id = data.get("chat_id")
+            tmp_file_id = tmp_file_id or data.get("tmp_file_id")
+            tmp_file_ids = tmp_file_ids or data.get("tmp_file_ids", [])
 
         if not chat_id or not isinstance(chat_id, str) or not chat_id.strip():
             return jsonify({"error": "必须提供有效的 chat_id"}), 400

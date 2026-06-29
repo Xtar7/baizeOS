@@ -115,26 +115,49 @@ class TmpService:
 
     def delete_file(self, chat_id: str, tmp_file_id: str) -> bool:
         """
-        删除指定 chat_id 下的单个临时文件
-        必须同时匹配 chat_id 和 tmp_file_id 才能删除
-        返回是否成功删除
+        通过 chat_id + tmp_file_id 精确定位文件并删除。
+        不再使用 rglob 模糊搜索，避免 chat_id 前缀/子串导致的误删。
+
+        路径结构: data/{date}/{chat_id}/{ext}/{tmp_file_id}{ext}
+        逐层精确查找，chat_id 目录作为安全边界。
         """
         chat_id_clean = chat_id.strip()
         tmp_file_id_clean = tmp_file_id.strip()
 
+        if not DATA_ROOT.exists():
+            return False
+
         deleted = False
 
-        for path in DATA_ROOT.rglob(f"{tmp_file_id_clean}.*"):
-            if path.is_file():
-                # 严格检查路径中是否包含该 chat_id（防止误删其他对话的文件）
-                path_parts = [p.strip() for p in path.parts]
-                if chat_id_clean in path_parts:
+        for date_dir in DATA_ROOT.iterdir():
+            if not date_dir.is_dir():
+                continue
+
+            # 精确匹配 chat_id 目录（安全边界）
+            chat_dir = date_dir / chat_id_clean
+            if not chat_dir.is_dir():
+                continue
+
+            # 在 chat_id 目录下，按扩展名字目录查找
+            for ext_dir in chat_dir.iterdir():
+                if not ext_dir.is_dir():
+                    continue
+
+                # 文件名格式: {tmp_file_id}{ext}
+                target = ext_dir / f"{tmp_file_id_clean}{ext_dir.name}"
+                if target.exists() and target.is_file():
                     try:
-                        path.unlink()
+                        target.unlink()
                         deleted = True
+                        # 如果该扩展名目录空了，删除它
+                        if not any(ext_dir.iterdir()):
+                            ext_dir.rmdir()
                     except Exception as e:
-                        print(f"[ERROR] 删除文件失败 {path}: {e}")
-                        continue
+                        print(f"[ERROR] 删除文件失败 {target}: {e}")
+
+            # chat_id 目录空了也清理
+            if not any(chat_dir.iterdir()):
+                chat_dir.rmdir()
 
         return deleted
 
