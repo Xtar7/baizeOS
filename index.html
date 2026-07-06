@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>baizeOS</title>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <div id="app">
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <div class="logo">
+          <span class="logo-icon">◆</span>
+          <span class="logo-text">baizeOS</span>
+        </div>
+        <button class="btn-new-chat" id="btnNewChat" title="新建对话">＋ 新对话</button>
+      </div>
+      <nav class="sidebar-nav" id="sidebarNav"></nav>
+      <div class="sidebar-footer">
+        <button class="nav-item" data-view="knowledge">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+          <span>知识库</span>
+        </button>
+        <button class="nav-item" data-view="settings">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+          <span>设置</span>
+        </button>
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main" id="main">
+      <!-- Top Bar -->
+      <header class="topbar" id="topbar">
+        <div class="topbar-left">
+          <button class="btn-sidebar-toggle" id="btnSidebarToggle">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+          </button>
+          <div class="topbar-title" id="topbarTitle">对话</div>
+        </div>
+        <div class="topbar-right" id="topbarRight"></div>
+      </header>
+
+      <!-- Views Container -->
+      <div class="views" id="views">
+
+        <!-- ===== Chat View ===== -->
+        <section class="view view-chat active" id="viewChat">
+          <div class="chat-empty" id="chatEmpty">
+            <div class="chat-empty-inner">
+              <div class="chat-empty-icon">◆</div>
+              <h1>你好，我是 baizeOS</h1>
+              <p>我可以帮你回答问题、分析文档、编写代码</p>
+              <div class="chat-suggestions" id="chatSuggestions">
+                <button class="suggestion" data-q="帮我写一个Python快速排序算法">帮我写一个 Python 快速排序算法</button>
+                <button class="suggestion" data-q="解释一下什么是向量数据库">解释一下什么是向量数据库</button>
+                <button class="suggestion" data-q="用通俗的语言介绍RAG技术">用通俗的语言介绍 RAG 技术</button>
+                <button class="suggestion" data-q="分析这段代码的性能问题">分析这段代码的性能问题</button>
+              </div>
+            </div>
+          </div>
+          <div class="chat-messages" id="chatMessages"></div>
+          <div class="chat-input-area" id="chatInputArea">
+            <div class="chat-attachments" id="chatAttachments">
+              <button class="btn-attach" id="btnAttach" title="上传附件">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+              </button>
+              <div class="attachment-preview" id="attachmentPreview"></div>
+            </div>
+            <div class="chat-rag-toggle" id="ragToggleWrap">
+              <button class="rag-toggle-btn" id="ragToggle" title="RAG 知识库问答">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+                <span>RAG</span>
+              </button>
+              <select class="kb-select" id="kbSelect" title="选择知识库">
+                <option value="">— 选择知识库 —</option>
+              </select>
+            </div>
+            <textarea class="chat-textarea" id="chatTextarea" rows="1" placeholder="输入消息..."></textarea>
+            <button class="btn-send" id="btnSend">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+            </button>
+          </div>
+        </section>
+
+        <!-- ===== Knowledge Base View ===== -->
+        <section class="view view-knowledge" id="viewKnowledge">
+          <div class="knowledge-header">
+            <h2>知识库管理</h2>
+            <button class="btn-primary" id="btnNewKB">＋ 新建知识库</button>
+          </div>
+          <div class="knowledge-grid" id="knowledgeGrid">
+            <!-- KB cards rendered here -->
+          </div>
+          <div class="knowledge-empty" id="knowledgeEmpty">
+            <div class="knowledge-empty-inner">
+              <div class="knowledge-empty-icon">📚</div>
+              <h3>还没有知识库</h3>
+              <p>创建一个知识库来存储你的文档，开启 RAG 智能问答</p>
+            </div>
+          </div>
+        </section>
+
+        <!-- ===== Knowledge Detail View ===== -->
+        <section class="view view-kb-detail" id="viewKbDetail">
+          <div class="kb-detail-header">
+            <button class="btn-back" id="btnBackKB">← 返回</button>
+            <div class="kb-detail-info">
+              <h2 id="kbDetailName"></h2>
+              <p id="kbDetailDesc"></p>
+            </div>
+            <div class="kb-detail-actions">
+              <button class="btn-secondary" id="btnReindex">🔄 重建索引</button>
+              <button class="btn-danger" id="btnDeleteKB">🗑 删除</button>
+            </div>
+          </div>
+          <div class="kb-detail-body">
+            <div class="kb-detail-section">
+              <div class="kb-detail-section-header">
+                <h3>文件列表</h3>
+                <label class="btn-upload" id="btnUploadFile">
+                  ＋ 上传文件
+                  <input type="file" id="fileInput" hidden accept=".txt,.md,.pdf" />
+                </label>
+              </div>
+              <div class="kb-files" id="kbFiles"></div>
+              <div class="kb-files-empty" id="kbFilesEmpty">
+                <p>暂无文件，上传文档开始构建知识库</p>
+              </div>
+            </div>
+            <div class="kb-detail-section">
+              <h3>知识库信息</h3>
+              <div class="kb-meta-grid" id="kbMetaGrid"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ===== Settings View ===== -->
+        <section class="view view-settings" id="viewSettings">
+          <div class="settings-container">
+            <h2>设置</h2>
+            <div class="settings-section">
+              <h3>模型配置</h3>
+              <div id="settingsModels"></div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <!-- Modals -->
+    <div class="modal-overlay" id="modalOverlay">
+      <div class="modal" id="modal">
+        <div class="modal-header">
+          <h3 id="modalTitle">新建知识库</h3>
+          <button class="modal-close" id="modalClose">×</button>
+        </div>
+        <div class="modal-body" id="modalBody"></div>
+        <div class="modal-footer" id="modalFooter"></div>
+      </div>
+    </div>
+
+    <!-- Toast -->
+    <div class="toast-container" id="toastContainer"></div>
+  </div>
+
+  <script src="./app.js"></script>
+</body>
+</html>
