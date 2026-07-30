@@ -6,6 +6,7 @@
       "@/*": ["./src/*"]
     },
     "types": ["vite/client"],
+    "ignoreDeprecations": "6.0",
 
     /* Linting */
     "noUnusedLocals": false,

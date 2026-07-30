@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dir *)",
+      "Bash(cmd /c 'dir /a /b E:\\\\baizeOS')",
+      "Bash(xcopy *)"
+    ]
+  }
+}
