@@ -226,7 +226,6 @@ models/embedding/
 models/ocr/
 
 # Documentation folders
-文档/
 RAG测试文档/
 docs/
 documentation/
