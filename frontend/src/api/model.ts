@@ -1,28 +1,12 @@
+import type { EmbeddingListResponse, LlmListResponse } from '@/types/api'
 import api from './request'
 
-export interface LLMModel {
-  id: string
-  object: string
-  created: number
-  owned_by: string
+/** 列出本地 LLM 模型 — GET /v1/models */
+export function listModels() {
+  return api.get<LlmListResponse, LlmListResponse>('/models')
 }
 
-export interface EmbeddingModel {
-  name: string
-  path: string
-  dim: number
-  type: string
-  is_default: boolean
-}
-
-export async function listModels() {
-  return api.get<{ object: string; data: LLMModel[] }>('/models')
-}
-
-export async function listEmbeddingModels() {
-  return api.get<{
-    models: EmbeddingModel[]
-    default: string
-    total: number
-  }>('/rag/embedding_models')
+/** 列出可用 Embedding 模型 — GET /v1/rag/embedding_models */
+export function listEmbeddingModels() {
+  return api.get<EmbeddingListResponse, EmbeddingListResponse>('/rag/embedding_models')
 }

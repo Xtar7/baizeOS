@@ -1,0 +1,320 @@
+/* ============================================================
+   聊天 Markdown 排版 + 代码块 + highlight.js 配色
+   代码配色从暖色世界派生，明暗两套。
+   ============================================================ */
+
+.msg-prose {
+  font-size: 15px;
+  line-height: 1.72;
+  color: var(--ink);
+  overflow-wrap: break-word;
+}
+
+.msg-prose > *:first-child {
+  margin-top: 0;
+}
+
+.msg-prose > *:last-child {
+  margin-bottom: 0;
+}
+
+.msg-prose p {
+  margin: 10px 0;
+}
+
+.msg-prose h1,
+.msg-prose h2,
+.msg-prose h3,
+.msg-prose h4 {
+  margin: 22px 0 10px;
+  font-weight: 600;
+}
+
+.msg-prose h1 {
+  font-size: 20px;
+}
+
+.msg-prose h2 {
+  font-size: 17.5px;
+}
+
+.msg-prose h3 {
+  font-size: 16px;
+}
+
+.msg-prose h4 {
+  font-size: 15px;
+}
+
+.msg-prose ul,
+.msg-prose ol {
+  margin: 10px 0;
+  padding-left: 24px;
+}
+
+.msg-prose li {
+  margin: 5px 0;
+}
+
+.msg-prose li::marker {
+  color: var(--ink-faint);
+}
+
+.msg-prose blockquote {
+  margin: 12px 0;
+  padding: 2px 14px;
+  border-left: 2px solid var(--line-strong);
+  color: var(--ink-2);
+}
+
+.msg-prose hr {
+  border: none;
+  border-top: 1px solid var(--line);
+  margin: 18px 0;
+}
+
+.msg-prose table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 12px 0;
+  font-size: 13.5px;
+  display: block;
+  overflow-x: auto;
+}
+
+.msg-prose th,
+.msg-prose td {
+  border: 1px solid var(--line);
+  padding: 7px 11px;
+  text-align: left;
+}
+
+.msg-prose th {
+  background: var(--surface-well);
+  font-weight: 600;
+}
+
+.msg-prose img {
+  border-radius: var(--r-sm);
+  margin: 8px 0;
+}
+
+/* 行内代码 */
+.msg-prose code:not(.hljs) {
+  font-family: var(--font-mono);
+  font-size: 0.86em;
+  background: var(--surface-well);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 1.5px 5px;
+}
+
+/* ============ 代码块 ============ */
+
+.code-block {
+  margin: 12px 0;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  overflow: hidden;
+  background: var(--code-bg);
+}
+
+.code-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 8px 6px 14px;
+  background: var(--code-head);
+  border-bottom: 1px solid var(--line);
+}
+
+.code-lang {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  letter-spacing: 0.04em;
+  color: var(--ink-3);
+}
+
+.code-copy {
+  font-size: 12px;
+  color: var(--ink-3);
+  padding: 3px 9px;
+  border-radius: 6px;
+  transition:
+    background-color 0.15s ease-out,
+    color 0.15s ease-out;
+}
+
+.code-copy:hover {
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
+
+.code-block pre {
+  margin: 0;
+  padding: 13px 15px;
+  overflow-x: auto;
+}
+
+.code-block pre code.hljs {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.65;
+  background: transparent;
+  padding: 0;
+  display: block;
+}
+
+/* 流式光标（追加到最后一个渲染元素末尾；须全局定义以作用于 v-html 内容） */
+.msg-prose.is-streaming > *:last-child::after {
+  content: '';
+  display: inline-block;
+  width: 7px;
+  height: 14px;
+  margin-left: 3px;
+  vertical-align: -2px;
+  background: var(--accent);
+  border-radius: 2px;
+  animation: caret-blink 1s steps(2, start) infinite;
+}
+
+.stream-caret::after {
+  content: '';
+  display: inline-block;
+  width: 8px;
+  height: 15px;
+  margin-left: 2px;
+  vertical-align: -2px;
+  background: var(--accent);
+  border-radius: 2px;
+  animation: caret-blink 1s steps(2, start) infinite;
+}
+
+@keyframes caret-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+/* ============ highlight.js 暖色配色（浅色） ============ */
+
+.hljs-comment,
+.hljs-quote {
+  color: #8f8c7d;
+  font-style: italic;
+}
+
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-tag {
+  color: #9d4522;
+}
+
+.hljs-string,
+.hljs-regexp,
+.hljs-addition {
+  color: #4c6e33;
+}
+
+.hljs-number,
+.hljs-literal,
+.hljs-symbol,
+.hljs-bullet {
+  color: #7a55a5;
+}
+
+.hljs-title,
+.hljs-title.function_,
+.hljs-section,
+.hljs-name {
+  color: #35608b;
+}
+
+.hljs-attr,
+.hljs-attribute,
+.hljs-variable,
+.hljs-template-variable,
+.hljs-type,
+.hljs-class .hljs-title {
+  color: #92613a;
+}
+
+.hljs-built_in,
+.hljs-builtin-name,
+.hljs-meta .hljs-keyword {
+  color: #8a6a1f;
+}
+
+.hljs-meta,
+.hljs-doctag {
+  color: #75725f;
+}
+
+.hljs-deletion {
+  color: #b3402f;
+}
+
+.hljs-emphasis {
+  font-style: italic;
+}
+
+.hljs-strong {
+  font-weight: 600;
+}
+
+/* ============ 深色主题代码配色 ============ */
+
+.dark .hljs-comment,
+.dark .hljs-quote {
+  color: #85837a;
+}
+
+.dark .hljs-keyword,
+.dark .hljs-selector-tag,
+.dark .hljs-tag {
+  color: #e08d64;
+}
+
+.dark .hljs-string,
+.dark .hljs-regexp,
+.dark .hljs-addition {
+  color: #a3bd85;
+}
+
+.dark .hljs-number,
+.dark .hljs-literal,
+.dark .hljs-symbol,
+.dark .hljs-bullet {
+  color: #bfa4e3;
+}
+
+.dark .hljs-title,
+.dark .hljs-title.function_,
+.dark .hljs-section,
+.dark .hljs-name {
+  color: #8fb4dd;
+}
+
+.dark .hljs-attr,
+.dark .hljs-attribute,
+.dark .hljs-variable,
+.dark .hljs-template-variable,
+.dark .hljs-type,
+.dark .hljs-class .hljs-title {
+  color: #dba579;
+}
+
+.dark .hljs-built_in,
+.dark .hljs-builtin-name,
+.dark .hljs-meta .hljs-keyword {
+  color: #d4bc72;
+}
+
+.dark .hljs-meta,
+.dark .hljs-doctag {
+  color: #99978b;
+}
+
+.dark .hljs-deletion {
+  color: #e07862;
+}

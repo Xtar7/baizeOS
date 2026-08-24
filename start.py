@@ -1,0 +1,175 @@
+# -*- coding: utf-8 -*-
+"""
+baizeOS 一键启动入口
+====================
+同时拉起 Flask 后端 (localhost:5000) 与 Vite 前端开发服务器 (localhost:3000)，
+前端就绪后自动打开浏览器；Ctrl+C 一次性退出并清理两个子进程。
+
+用法：
+    python start.py          # 或双击 start.bat
+"""
+from __future__ import annotations
+
+import os
+import shutil
+import socket
+import subprocess
+import sys
+import time
+import urllib.error
+import urllib.request
+import webbrowser
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent
+BACKEND_DIR = ROOT / "backend"
+FRONTEND_DIR = ROOT / "frontend"
+
+BACKEND_URL = "http://localhost:5000"
+FRONTEND_URL = "http://localhost:3000"
+
+IS_WIN = sys.platform == "win32"
+
+
+def info(msg: str) -> None:
+    print(f"\033[36m[start]\033[0m {msg}", flush=True)
+
+
+def warn(msg: str) -> None:
+    print(f"\033[33m[start]\033[0m {msg}", flush=True)
+
+
+def fail(msg: str) -> None:
+    print(f"\033[31m[start]\033[0m {msg}", flush=True)
+
+
+def port_busy(port: int) -> bool:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.settimeout(0.4)
+        return s.connect_ex(("127.0.0.1", port)) == 0
+
+
+def wait_url(url: str, timeout: float = 60.0) -> bool:
+    """轮询直到 URL 可访问（开发服务器就绪）。"""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        try:
+            with urllib.request.urlopen(url, timeout=1.5):
+                return True
+        except (urllib.error.URLError, ConnectionError, OSError):
+            time.sleep(0.6)
+    return False
+
+
+def kill_tree(pid: int) -> None:
+    """连同子进程树一起结束（Windows 下 vite/flask 都可能有子进程）。"""
+    if not pid:
+        return
+    try:
+        if IS_WIN:
+            subprocess.run(
+                ["taskkill", "/PID", str(pid), "/T", "/F"],
+                capture_output=True,
+            )
+        else:
+            subprocess.run(["kill", "--", "-" + str(pid)], capture_output=True)
+    except OSError:
+        pass
+
+
+def require(exe: str, hint: str) -> str:
+    path = shutil.which(exe)
+    if not path:
+        fail(f"未找到 {exe}。{hint}")
+        sys.exit(1)
+    return path
+
+
+def run_step(cmd: list[str], cwd: Path, what: str) -> None:
+    """前台跑一个准备步骤（如安装依赖），输出实时透传。"""
+    info(f"{what} …")
+    proc = subprocess.run(cmd, cwd=cwd)
+    if proc.returncode != 0:
+        fail(f"{what} 失败（退出码 {proc.returncode}）")
+        sys.exit(proc.returncode)
+
+
+def main() -> int:
+    # Windows 控制台默认 GBK，强制 UTF-8 避免中文乱码
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
+    print("=" * 56)
+    print("  baizeOS · 本地知识库问答系统")
+    print("  后端 http://localhost:5000   前端 http://localhost:3000")
+    print("=" * 56)
+
+    if not BACKEND_DIR.exists() or not FRONTEND_DIR.exists():
+        fail("目录不完整：需要与 start.py 同级的 backend/ 与 frontend/")
+        return 1
+
+    uv = require("uv", "请先安装：https://docs.astral.sh/uv/getting-started/")
+    pnpm = shutil.which("pnpm")
+    if not pnpm:
+        warn("未找到 pnpm，回退使用 npm（建议：npm i -g pnpm）")
+        pnpm = shutil.which("npm")
+        if not pnpm:
+            fail("未找到 npm/pnpm，请先安装 Node.js：https://nodejs.org/")
+            return 1
+    pkg_mgr = Path(pnpm).name.lower()  # pnpm / npm
+
+    # ---- 前端依赖 ----
+    if not (FRONTEND_DIR / "node_modules").exists():
+        run_step([pnpm, "install"], FRONTEND_DIR, "首次运行，安装前端依赖")
+
+    procs: list[subprocess.Popen] = []
+
+    try:
+        # ---- 后端 ----
+        if port_busy(5000):
+            warn("端口 5000 已被占用：假定后端已在运行，跳过启动。")
+        else:
+            info("启动后端 Flask …")
+            procs.append(subprocess.Popen(
+                [uv, "run", "python", "app.py"],
+                cwd=BACKEND_DIR,
+                env={**os.environ, "PYTHONUNBUFFERED": "1"},
+            ))
+
+        # ---- 前端 ----
+        if port_busy(3000):
+            warn("端口 3000 已被占用：Vite 将自动换端口，注意控制台提示。")
+        info("启动前端 Vite …")
+        procs.append(subprocess.Popen([pnpm, "run", "dev"], cwd=FRONTEND_DIR))
+
+        # ---- 等前端就绪并打开浏览器 ----
+        if wait_url(FRONTEND_URL, timeout=60):
+            info(f"前端就绪，打开浏览器：{FRONTEND_URL}")
+            webbrowser.open(FRONTEND_URL)
+        else:
+            warn("60 秒内未检测到前端就绪（首次启动编译可能较慢），可手动访问 " + FRONTEND_URL)
+
+        info("两个服务运行中，按 Ctrl+C 一起退出。")
+
+        # ---- 守护循环 ----
+        while True:
+            time.sleep(2)
+            for p in procs:
+                code = p.poll()
+                if code is not None:
+                    fail(f"子进程退出（码 {code}），整体关闭。")
+                    return code or 1
+    except KeyboardInterrupt:
+        print(flush=True)
+        info("正在退出 …")
+        return 0
+    finally:
+        for p in procs:
+            kill_tree(p.pid)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

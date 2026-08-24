@@ -1,0 +1,123 @@
+/* ============================================================
+   baizeOS design tokens — 暖色仪器世界 (warm instrument world)
+   唯一强调色陶土橙；细线承担结构；阴影只给浮层。
+   ============================================================ */
+
+:root {
+  /* 表面 */
+  --bg: #faf9f5;
+  --bg-deep: #f1efe8;
+  --surface: #fffffe;
+  --surface-well: #f5f4ee;
+  --overlay: rgb(31 30 29 / 32%);
+
+  /* 文字 */
+  --ink: #1f1e1d;
+  --ink-2: #55524a;
+  --ink-3: #75725f;
+  --ink-faint: #7d7968;
+
+  /* 线 */
+  --line: #e8e5db;
+  --line-strong: #d7d4c6;
+
+  /* 强调 — 陶土 */
+  --accent: #c96342;
+  --accent-hover: #b45234;
+  --accent-text: #b05334;
+  --on-accent: #ffffff;
+  --accent-soft: rgb(201 99 66 / 9%);
+  --accent-tint-line: rgb(201 99 66 / 28%);
+
+  /* 语义 */
+  --ok: #5f7a44;
+  --ok-soft: rgb(95 122 68 / 10%);
+  --warn: #92650f;
+  --warn-soft: rgb(154 107 21 / 11%);
+  --warn-line: rgb(154 107 21 / 30%);
+  --danger: #b3402f;
+  --danger-hover: #98341f;
+  --danger-soft: rgb(179 64 47 / 8%);
+  --danger-line: rgb(179 64 47 / 26%);
+
+  /* 代码块 */
+  --code-head: #f0eee6;
+  --code-bg: #fcfbf7;
+
+  /* 字体 */
+  --font-ui: 'Segoe UI Variable Text', 'Segoe UI', -apple-system, 'PingFang SC',
+    'Microsoft YaHei', 'Helvetica Neue', Arial, sans-serif;
+  --font-display: Georgia, 'Times New Roman', 'Source Han Serif SC', 'Noto Serif SC',
+    serif;
+  --font-mono: 'Cascadia Code', Consolas, 'SF Mono', 'JetBrains Mono', ui-monospace,
+    monospace;
+
+  /* 圆角 */
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 16px;
+  --r-xl: 22px;
+
+  /* 阴影（只给浮层） */
+  --shadow-pop:
+    0 12px 32px -8px rgb(28 25 23 / 16%),
+    0 3px 8px -2px rgb(28 25 23 / 8%);
+  --shadow-modal:
+    0 24px 64px -16px rgb(28 25 23 / 24%),
+    0 8px 20px -8px rgb(28 25 23 / 12%);
+
+  --btn-solid-bg: #232220;
+  --btn-solid-bg-hover: #3a3833;
+  --btn-solid-fg: #faf9f5;
+
+  color-scheme: light;
+}
+
+.dark {
+  --bg: #262624;
+  --bg-deep: #20201f;
+  --surface: #2f2f2d;
+  --surface-well: #292927;
+  --overlay: rgb(12 12 11 / 55%);
+
+  --ink: #f0eee6;
+  --ink-2: #c3c1b4;
+  --ink-3: #99978b;
+  --ink-faint: #86847a;
+
+  --line: #3b3a36;
+  --line-strong: #4b4942;
+
+  --accent: #cd6746;
+  --accent-hover: #dd7a58;
+  --accent-text: #e39b7b;
+  --on-accent: #ffffff;
+  --accent-soft: rgb(227 155 123 / 10%);
+  --accent-tint-line: rgb(227 155 123 / 30%);
+
+  --ok: #93b474;
+  --ok-soft: rgb(147 180 116 / 12%);
+  --warn: #d8a94e;
+  --warn-soft: rgb(216 169 78 / 13%);
+  --warn-line: rgb(216 169 78 / 32%);
+  --danger: #e07862;
+  --danger-hover: #ea8d78;
+  --danger-soft: rgb(224 120 98 / 12%);
+  --danger-line: rgb(224 120 98 / 30%);
+
+  --code-head: #1e1e1c;
+  --code-bg: #232320;
+
+  --shadow-pop:
+    0 12px 32px -8px rgb(0 0 0 / 45%),
+    0 3px 8px -2px rgb(0 0 0 / 30%);
+  --shadow-modal:
+    0 24px 64px -16px rgb(0 0 0 / 60%),
+    0 8px 20px -8px rgb(0 0 0 / 40%);
+
+  --btn-solid-bg: #eceadf;
+  --btn-solid-bg-hover: #dcd9ca;
+  --btn-solid-fg: #232220;
+
+  color-scheme: dark;
+}

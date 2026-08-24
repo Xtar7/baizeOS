@@ -2,11 +2,25 @@
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23FAF9F5'/%3E%3Cpath d='M16 6v20M7.28 11l17.44 10M24.72 11L7.28 21' stroke='%23C96342' stroke-width='2.6' stroke-linecap='round'/%3E%3C/svg%3E" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>baizeOS - 本地 RAG 智能助手</title>
+    <meta name="theme-color" content="#FAF9F5" />
+    <title>白泽 baizeOS · 本地知识库问答</title>
   </head>
   <body>
+    <!--
+      DESIGN CONTRACT — baizeOS frontend
+      THESIS: 一台安静的本地产能仪器：本地模型与知识库在暖色调工作室里工作，
+      拒绝云端 AI 产品常见的蓝紫科技感模板。
+      OWN-WORLD: 暖象牙底 (#FAF9F5) + 暖炭墨文字，唯一强调色陶土橙 (#C96342)；
+      细线边框承担结构，阴影只给浮层；衬线体只出现在品牌字标与问候语等“助手声音”时刻。
+      STORY: 访问者完成三件事——对话（流式、可引用来源）、管理知识库（上传/重建索引）、
+      查看本地模型。每个动作都有明确的进行中、完成与失败状态。
+      FIRST VIEWPORT: 左侧 264px 导航栏（品牌星标 + 三项导航），右侧内容区居中列：
+      对话页为衬线问候语 + 四枚建议提问 + 底部悬浮输入台（附件/RAG/发送圆钮）。
+      FORM: brief-pinned 方向——Claude 风格暖色仪器世界（用户指定，跳过方向抽签）。
+      FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and DESIGN.md.
+    -->
     <div id="app"></div>
     <script type="module" src="/src/main.ts"></script>
   </body>

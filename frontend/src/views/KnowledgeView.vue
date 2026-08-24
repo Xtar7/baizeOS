@@ -1,396 +1,320 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useKbStore } from '@/stores/kb'
 import { useSettingsStore } from '@/stores/settings'
-import type { KBListItem } from '@/api/kb'
+import { ApiError } from '@/api/request'
+import type { KbListItem, KnowledgeBase } from '@/types/api'
+import Icon from '@/ui/Icon.vue'
+import AppButton from '@/ui/AppButton.vue'
+import EmptyState from '@/ui/EmptyState.vue'
+import KbFormModal from '@/components/kb/KbFormModal.vue'
+import { fromNow } from '@/utils/format'
 
 const router = useRouter()
 const kbStore = useKbStore()
-const settingsStore = useSettingsStore()
+const settings = useSettingsStore()
 
-const showCreateModal = ref(false)
-const newName = ref('')
-const newDesc = ref('')
-const newPrompt = ref('')
+const createOpen = ref(false)
+const editTarget = ref<KbListItem | KnowledgeBase | null>(null)
 
 onMounted(() => {
-  kbStore.fetchList()
+  void kbStore.fetchList(true).catch(() => undefined)
 })
 
-async function handleCreate() {
-  if (!newName.value.trim()) {
-    settingsStore.showToast('请输入知识库名称', 'error')
-    return
-  }
+function openDetail(kb: KbListItem) {
+  void router.push(`/kb/${kb.kb_id}`)
+}
+
+async function askEdit(kb: KbListItem) {
+  // 编辑弹窗需要完整 meta（提示词、embedding 模型），先拉详情
   try {
-    await kbStore.create({
-      display_name: newName.value,
-      description: newDesc.value,
-      system_prompt: newPrompt.value,
-    })
-    showCreateModal.value = false
-    newName.value = ''
-    newDesc.value = ''
-    newPrompt.value = ''
-    await kbStore.fetchList()
-    settingsStore.showToast('知识库创建成功', 'success')
-  } catch (e: unknown) {
-    const err = e as { message?: string }
-    settingsStore.showToast(`创建失败: ${err.message}`, 'error')
+    await kbStore.fetchDetail(kb.kb_id)
+    editTarget.value = kbStore.detail
+    createOpen.value = true
+  } catch {
+    settings.toast('获取知识库信息失败', 'error')
   }
 }
 
-async function handleDelete(kb: KBListItem) {
-  if (!confirm(`确定删除 "${kb.display_name}" 吗？`)) return
+async function askDelete(kb: KbListItem) {
+  const ok = await settings.confirm({
+    title: `删除知识库「${kb.display_name}」？`,
+    body: '将同时删除其中的全部文件与向量索引，此操作不可恢复。',
+    confirmText: '删除',
+    danger: true,
+  })
+  if (!ok) return
   try {
     await kbStore.remove(kb.kb_id)
-    settingsStore.showToast('已删除', 'success')
-  } catch (e: unknown) {
-    settingsStore.showToast('删除失败', 'error')
+    settings.toast(`已删除「${kb.display_name}」`, 'success')
+  } catch (err) {
+    settings.toast(err instanceof ApiError ? err.message : '删除失败', 'error')
   }
-}
-
-function goToDetail(kbId: string) {
-  router.push(`/knowledge/${kbId}`)
 }
 </script>
 
 <template>
-  <div class="knowledge-view">
-    <div class="kb-header">
-      <h2>知识库管理</h2>
-      <button class="btn-create" @click="showCreateModal = true">＋ 新建知识库</button>
+  <div class="page">
+    <header class="page-head">
+      <div>
+        <h1 class="page-title">知识库</h1>
+        <p class="page-sub tabular" v-if="kbStore.list.length">{{ kbStore.list.length }} 个知识库 · 上传文档构建专属问答</p>
+        <p class="page-sub" v-else>上传文档，构建属于你的本地知识库</p>
+      </div>
+      <AppButton variant="solid" size="md" @click="createOpen = true; editTarget = null">
+        <template #icon><Icon name="plus" :size="15" /></template>
+        新建知识库
+      </AppButton>
+    </header>
+
+    <!-- 加载骨架 -->
+    <div v-if="kbStore.loadingList && !kbStore.list.length" class="grid">
+      <div v-for="i in 4" :key="i" class="card card--skeleton" aria-hidden="true">
+        <div class="sk sk--title" />
+        <div class="sk sk--line" />
+        <div class="sk sk--line sk--short" />
+      </div>
     </div>
 
-    <!-- Grid -->
-    <div class="kb-grid">
-      <div
-        v-for="(kb, idx) in kbStore.list"
+    <!-- 空状态 -->
+    <EmptyState
+      v-else-if="!kbStore.list.length"
+      icon="library"
+      title="还没有知识库"
+      hint="创建一个知识库并上传 .txt / .md / .pdf 文档，即可在对话中引用这些内容。"
+    >
+      <AppButton variant="solid" size="md" @click="createOpen = true">
+        <template #icon><Icon name="plus" :size="15" /></template>
+        创建第一个知识库
+      </AppButton>
+    </EmptyState>
+
+    <!-- 卡片网格 -->
+    <div v-else class="grid">
+      <article
+        v-for="kb in kbStore.list"
         :key="kb.kb_id"
-        class="kb-card"
-        :style="{ animationDelay: `${idx * 0.06}s` }"
-        @click="goToDetail(kb.kb_id)"
+        class="card"
+        tabindex="0"
+        role="link"
+        :aria-label="`打开知识库 ${kb.display_name}`"
+        @click="openDetail(kb)"
+        @keydown.enter="openDetail(kb)"
       >
-        <div class="kb-card-header">
-          <h3>{{ kb.display_name }}</h3>
-          <span class="kb-file-count">{{ kb.file_count }} 个文件</span>
-        </div>
-        <p class="kb-desc">{{ kb.description || '暂无描述' }}</p>
-        <div class="kb-card-footer">
-          <span class="kb-date">{{ new Date(kb.created_at).toLocaleDateString('zh-CN') }}</span>
-          <button class="btn-delete-sm" @click.stop="handleDelete(kb)">删除</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Empty -->
-    <div v-if="!kbStore.loading && kbStore.list.length === 0" class="kb-empty">
-      <div class="kb-empty-icon">📚</div>
-      <h3>还没有知识库</h3>
-      <p>创建一个知识库来存储你的文档，开启 RAG 智能问答</p>
-    </div>
-
-    <!-- Loading -->
-    <div v-if="kbStore.loading" class="kb-loading">加载中...</div>
-
-    <!-- Create Modal -->
-    <Transition name="modal-fade">
-      <div v-if="showCreateModal" class="modal-overlay" @click.self="showCreateModal = false">
-        <div class="modal">
-          <h3>新建知识库</h3>
-          <div class="modal-form">
-            <label>
-              名称 <span class="required">*</span>
-              <input v-model="newName" placeholder="例如：技术文档" autofocus />
-            </label>
-            <label>
-              描述
-              <input v-model="newDesc" placeholder="可选" />
-            </label>
-            <label>
-              系统提示词
-              <input v-model="newPrompt" placeholder="例如：你是一个专业助手" />
-            </label>
-          </div>
-          <div class="modal-actions">
-            <button class="btn-cancel" @click="showCreateModal = false">取消</button>
-            <button class="btn-confirm" @click="handleCreate">创建</button>
+        <div class="card__top">
+          <span class="card__icon"><Icon name="library" :size="17" /></span>
+          <div class="card__actions">
+            <button class="icon-btn" type="button" aria-label="编辑" title="编辑" @click.stop="askEdit(kb)">
+              <Icon name="edit" :size="14.5" />
+            </button>
+            <button class="icon-btn icon-btn--danger" type="button" aria-label="删除" title="删除" @click.stop="askDelete(kb)">
+              <Icon name="trash" :size="14.5" />
+            </button>
           </div>
         </div>
-      </div>
-    </Transition>
+
+        <h2 class="card__name">{{ kb.display_name }}</h2>
+        <p class="card__desc">{{ kb.description || '暂无描述' }}</p>
+
+        <footer class="card__meta">
+          <span class="meta-chip tabular"><Icon name="file" :size="12.5" />{{ kb.file_count }}</span>
+          <span class="card__time tabular">{{ fromNow(kb.updated_at) }}</span>
+        </footer>
+      </article>
+    </div>
+
+    <KbFormModal
+      v-model:open="createOpen"
+      :editing="editTarget"
+      @saved="() => void kbStore.fetchList(true).catch(() => undefined)"
+    />
   </div>
 </template>
 
 <style scoped>
-.knowledge-view {
-  width: 100%;
-  max-width: 1100px;
+.page {
+  max-width: 1080px;
   margin: 0 auto;
+  padding: 30px clamp(16px, 2.9vw, 28px) 48px;
 }
 
-.kb-header {
+.page-head {
   display: flex;
+  align-items: flex-start;
   justify-content: space-between;
-  align-items: center;
+  gap: 16px;
   margin-bottom: 24px;
 }
 
-.kb-header h2 {
-  font-size: 22px;
-  font-weight: 600;
-  color: var(--text-primary);
+.page-title {
+  font-size: 23px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
 }
 
-.btn-create {
-  padding: 8px 18px;
-  border-radius: 8px;
-  border: none;
-  background: var(--accent);
-  color: white;
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all var(--transition-fast);
+.page-sub {
+  margin-top: 3px;
+  font-size: 13.5px;
+  color: var(--ink-3);
 }
 
-.btn-create:hover {
-  background: var(--accent-hover);
-  transform: translateY(-1px);
-  box-shadow: var(--shadow-sm);
-}
-
-.kb-grid {
+.grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(272px, 1fr));
+  gap: 14px;
 }
 
-.kb-card {
-  padding: 20px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: var(--bg-primary);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  box-shadow: var(--shadow-sm);
-  animation: slideUp 0.3s ease-out both;
-}
-
-.kb-card:hover {
-  border-color: var(--accent);
-  box-shadow: var(--shadow-md);
-  transform: translateY(-2px);
-}
-
-.kb-card-header {
+.card {
+  position: relative;
   display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  padding: 16px 17px 14px;
+  cursor: pointer;
+  transition:
+    border-color 0.16s ease-out,
+    transform 0.16s ease-out,
+    box-shadow 0.16s ease-out;
+}
+
+.card:hover {
+  border-color: var(--line-strong);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-pop);
+}
+
+.card:focus-visible {
+  outline-offset: 3px;
+}
+
+.card__top {
+  display: flex;
+  align-items: flex-start;
   justify-content: space-between;
-  align-items: center;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
 }
 
-.kb-card-header h3 {
-  font-size: 15px;
+.card__icon {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 11px;
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
+
+.card__actions {
+  display: flex;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 0.14s ease-out;
+}
+
+.card:hover .card__actions,
+.card:focus-within .card__actions {
+  opacity: 1;
+}
+
+.icon-btn {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  color: var(--ink-3);
+}
+
+.icon-btn:hover {
+  background: var(--surface-well);
+  color: var(--ink);
+}
+
+.icon-btn--danger:hover {
+  color: var(--danger);
+  background: var(--danger-soft);
+}
+
+.card__name {
+  font-size: 15.5px;
   font-weight: 600;
-  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.kb-file-count {
-  font-size: 12px;
-  color: var(--text-tertiary);
-  background: var(--bg-secondary);
-  padding: 2px 8px;
-  border-radius: 10px;
-}
-
-.kb-desc {
+.card__desc {
+  margin-top: 5px;
   font-size: 13px;
-  color: var(--text-secondary);
-  margin-bottom: 16px;
-  line-height: 1.5;
+  line-height: 1.6;
+  color: var(--ink-3);
+  min-height: 42px;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
 
-.kb-card-footer {
+.card__meta {
+  margin-top: 13px;
+  padding-top: 11px;
+  border-top: 1px solid var(--line);
   display: flex;
+  align-items: center;
   justify-content: space-between;
+}
+
+.meta-chip {
+  display: inline-flex;
   align-items: center;
-}
-
-.kb-date {
+  gap: 5px;
   font-size: 12px;
-  color: var(--text-tertiary);
+  color: var(--ink-3);
+  background: var(--surface-well);
+  border-radius: 999px;
+  padding: 3px 9px;
 }
 
-.btn-delete-sm {
+.card__time {
   font-size: 12px;
-  color: #ff3b30;
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 4px 8px;
-  border-radius: 4px;
-  transition: background var(--transition-fast);
+  color: var(--ink-faint);
 }
 
-.btn-delete-sm:hover {
-  background: rgba(255, 59, 48, 0.1);
+/* 骨架 */
+.card--skeleton {
+  cursor: default;
+  pointer-events: none;
 }
 
-.kb-empty {
-  text-align: center;
-  padding: 60px 20px;
+.sk {
+  border-radius: 7px;
+  background: linear-gradient(90deg, var(--surface-well) 25%, var(--bg-deep) 50%, var(--surface-well) 75%);
+  background-size: 200% 100%;
+  animation: sk-shimmer 1.4s ease-in-out infinite;
 }
 
-.kb-empty-icon {
-  font-size: 56px;
-  margin-bottom: 16px;
-}
-
-.kb-empty h3 {
-  font-size: 18px;
-  color: var(--text-primary);
-  margin-bottom: 8px;
-}
-
-.kb-empty p {
-  color: var(--text-secondary);
-}
-
-.kb-loading {
-  text-align: center;
-  padding: 40px;
-  color: var(--text-secondary);
-  animation: pulse 1.5s ease-in-out infinite;
-}
-
-/* Modal */
-.modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.4);
-  backdrop-filter: blur(4px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 100;
-}
-
-.modal {
-  background: var(--bg-primary);
-  border-radius: var(--radius-lg);
-  padding: 28px;
-  width: 420px;
-  max-width: 90vw;
-  box-shadow: var(--shadow-lg);
-  animation: slideUp 0.25s ease-out;
-}
-
-.modal h3 {
-  font-size: 18px;
-  font-weight: 600;
-  margin-bottom: 20px;
-  color: var(--text-primary);
-}
-
-.modal-form {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  margin-bottom: 24px;
-}
-
-.modal-form label {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  font-size: 13px;
-  color: var(--text-secondary);
-}
-
-.required {
-  color: #ff3b30;
-}
-
-.modal-form input {
-  padding: 10px 12px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--bg-secondary);
-  color: var(--text-primary);
-  font-size: 14px;
-  outline: none;
-  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
-}
-
-.modal-form input:focus {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-light);
-}
-
-.modal-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-}
-
-.btn-cancel {
-  padding: 8px 18px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--bg-primary);
-  color: var(--text-primary);
-  font-size: 13px;
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.btn-cancel:hover {
-  background: var(--bg-secondary);
-}
-
-.btn-confirm {
-  padding: 8px 18px;
-  border: none;
-  border-radius: 8px;
-  background: var(--accent);
-  color: white;
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.btn-confirm:hover {
-  background: var(--accent-hover);
-}
-
-/* Modal transitions */
-.modal-fade-enter-active,
-.modal-fade-leave-active {
-  transition: opacity var(--transition-normal);
-}
-
-.modal-fade-enter-from,
-.modal-fade-leave-to {
-  opacity: 0;
-}
-
-/* Responsive */
-@media (max-width: 768px) {
-  .kb-grid {
-    grid-template-columns: 1fr;
+@keyframes sk-shimmer {
+  to {
+    background-position: -200% 0;
   }
+}
 
-  .kb-header {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 12px;
-  }
+.sk--title {
+  height: 18px;
+  width: 55%;
+  margin-bottom: 13px;
+}
+
+.sk--line {
+  height: 12px;
+  width: 100%;
+  margin-top: 8px;
+}
+
+.sk--short {
+  width: 62%;
 }
 </style>
