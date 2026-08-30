@@ -77,14 +77,6 @@ def kill_tree(pid: int) -> None:
         pass
 
 
-def require(exe: str, hint: str) -> str:
-    path = shutil.which(exe)
-    if not path:
-        fail(f"未找到 {exe}。{hint}")
-        sys.exit(1)
-    return path
-
-
 def run_step(cmd: list[str], cwd: Path, what: str) -> None:
     """前台跑一个准备步骤（如安装依赖），输出实时透传。"""
     info(f"{what} …")
@@ -111,7 +103,6 @@ def main() -> int:
         fail("目录不完整：需要与 start.py 同级的 backend/ 与 frontend/")
         return 1
 
-    uv = require("uv", "请先安装：https://docs.astral.sh/uv/getting-started/")
     pnpm = shutil.which("pnpm")
     if not pnpm:
         warn("未找到 pnpm，回退使用 npm（建议：npm i -g pnpm）")
@@ -119,8 +110,6 @@ def main() -> int:
         if not pnpm:
             fail("未找到 npm/pnpm，请先安装 Node.js：https://nodejs.org/")
             return 1
-    pkg_mgr = Path(pnpm).name.lower()  # pnpm / npm
-
     # ---- 前端依赖 ----
     if not (FRONTEND_DIR / "node_modules").exists():
         run_step([pnpm, "install"], FRONTEND_DIR, "首次运行，安装前端依赖")
@@ -128,13 +117,17 @@ def main() -> int:
     procs: list[subprocess.Popen] = []
 
     try:
-        # ---- 后端 ----
+        # ---- 后端（直接调用 venv 内的 Python，避免系统默认 Python 找不到依赖） ----
         if port_busy(5000):
             warn("端口 5000 已被占用：假定后端已在运行，跳过启动。")
         else:
             info("启动后端 Flask …")
+            backend_py = BACKEND_DIR / ".venv" / "Scripts" / "python.exe" if IS_WIN else BACKEND_DIR / ".venv" / "bin" / "python"
+            if not backend_py.exists():
+                fail(f"未找到后端虚拟环境：{backend_py}")
+                return 1
             procs.append(subprocess.Popen(
-                [uv, "run", "python", "app.py"],
+                [str(backend_py), "app.py"],
                 cwd=BACKEND_DIR,
                 env={**os.environ, "PYTHONUNBUFFERED": "1"},
             ))
