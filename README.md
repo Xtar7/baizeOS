@@ -11,7 +11,8 @@
 
 <br>
 
-![baizeOS hero](<img width="1280" height="640" alt="hero" src="https://github.com/user-attachments/assets/d51fa9a9-6e5b-4770-8076-21d69d06d759" />)
+<img width="1280" height="640" alt="hero" src="https://github.com/user-attachments/assets/d90c36c2-4bd6-439a-b8d7-3eb963bf72c7" />
+
 
 <br>
 
