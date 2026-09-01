@@ -258,6 +258,30 @@ PRs are welcome. The short version:
 
 ---
 
+## Terms of Use · Anti-996
+
+This project welcomes individual developers, academic researchers, and non-commercial organizations. **Organizations** that mandate any of the following excessive work-hour arrangements — and any of their employees — are **prohibited from using this project**:
+
+- **"996"** — 9 a.m. to 9 p.m., six days per week
+- **"大小周" (alternating weeks)** — single-day-off weeks alternating with double-day-off weeks
+- **Any work-hour schedule exceeding the statutory cap** under the labor law of the jurisdiction where workers are employed, including but not limited to the 36-hour-per-month overtime cap under the PRC Labor Law
+
+**Scope of the restriction.** The above prohibition applies to:
+
+- **Direct use** of this project by such organizations
+- **Offering this project as a network service** to third parties (including wrapped, forked, or re-branded versions)
+- **Bundling this project into a commercial product** and redistributing it
+
+**Out of scope.** The following are not affected:
+
+- Individual developers using the project for study, research, or personal projects
+- Organizations that strictly comply with the statutory work-hour cap of the applicable jurisdiction
+- Organizations that can demonstrate, by reasonable documentary evidence, that none of their workforce is subject to any work-hour arrangement exceeding the statutory cap
+
+If your employer mandates any of the above, **please do not** use this project, and feel free to recommend a labor-law-compliant work environment to your colleagues. This is a **community covenant**, not a contractual clause; its spirit rests on the belief that technical professionals have the right to refuse excessive work hours.
+
+---
+
 ## License
 
 [MIT](./LICENSE) — © 2026 Xtar. Use it, fork it, ship your own flavor.
