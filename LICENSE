@@ -1,6 +1,12 @@
                     GNU GENERAL PUBLIC LICENSE
                        Version 3, 29 June 2007
 
+ baizeOS project relicensing notice:
+ Copyright (c) 2026 Xtar. Licensed under GPL-3.0. Prior versions of
+ this project were released under the MIT License; that earlier
+ release remains under the MIT License. See git history for the
+ commit at which the license changed.
+
  Copyright (C) 2007 Free Software Foundation, Inc. <https://fsf.org/>
  Everyone is permitted to copy and distribute verbatim copies
  of this license document, but changing it is not allowed.

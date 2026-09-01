@@ -5,7 +5,7 @@
 > **在你自己电脑上跑的 RAG 知识库问答助手——完全离线，完全由你掌控。**
 > baizeOS 把本地 GGUF 大模型和你本地的 `.txt` / `.md` / `.pdf` 文档通过向量索引串起来，每条回答都附带它实际引用过的原文片段。
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-232323.svg)](./LICENSE)
+[![License: GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-232323.svg)](./LICENSE)
 [![Vue 3](https://img.shields.io/badge/前端-Vue%203%20%2B%20TS-4F8F4F.svg)](#技术栈)
 [![Flask](https://img.shields.io/badge/后端-Flask%20%2B%20llama--cpp-C96342.svg)](#技术栈)
 [![本地优先](https://img.shields.io/badge/隐私-100%25%20本地推理-1f1e1d.svg)](#隐私)
@@ -285,7 +285,7 @@ REST + SSE 接口契约完整定义在 [`docs/接口规范.md`](./docs/接口规
 
 ## 许可证
 
-[MIT](./LICENSE) — © 2026 Xtar。随便用、随便 fork、随便发你的变体。
+[GPL-3.0](./LICENSE) — © 2026 Xtar。任何人都可以自由使用、修改、分发，但**所有衍生作品必须同样以 GPL-3.0 开源**。商业使用允许，但必须回馈社区。
 
 <br>
 

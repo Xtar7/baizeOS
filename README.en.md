@@ -5,7 +5,7 @@
 > **Run a RAG knowledge-base assistant on your own machine — fully offline, fully under your control.**
 > baizeOS pairs a local GGUF LLM with a vector index over your `.txt` / `.md` / `.pdf` files, so every answer comes with the source passages it was grounded on.
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-232323.svg)](./LICENSE)
+[![License: GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-232323.svg)](./LICENSE)
 [![Vue 3](https://img.shields.io/badge/Frontend-Vue%203%20%2B%20TS-4F8F4F.svg)](#tech-stack)
 [![Flask](https://img.shields.io/badge/Backend-Flask%20%2B%20llama--cpp-C96342.svg)](#tech-stack)
 [![Local First](https://img.shields.io/badge/Privacy-100%25%20local%20inference-1f1e1d.svg)](#privacy)
@@ -284,7 +284,7 @@ If your employer mandates any of the above, **please do not** use this project, 
 
 ## License
 
-[MIT](./LICENSE) — © 2026 Xtar. Use it, fork it, ship your own flavor.
+[GPL-3.0](./LICENSE) — © 2026 Xtar. Free to use, modify, and redistribute, but **all derivative works must also be open-sourced under GPL-3.0**. Commercial use is allowed, but the community must benefit in turn.
 
 <br>
 
