@@ -235,3 +235,6 @@ docs/
 documentation/
 ui-ux-pro-max-skill-2.7.0/
 *.md
+!README*.md
+!DESIGN.md
+!PRODUCT.md
