@@ -14,8 +14,7 @@
 [![en](https://img.shields.io/badge/lang-English-232323.svg)](./README.en.md)
 
 <br>
-
-![baizeOS 首页图](./docs/screenshots/hero.png)
+<img width="1280" height="640" alt="hero" src="https://github.com/user-attachments/assets/af97064f-5b70-4d15-be72-cba5e7d89d42" />
 
 <br>
 
