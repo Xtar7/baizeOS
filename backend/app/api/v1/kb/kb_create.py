@@ -4,6 +4,7 @@ from app.services.kb_service import kb_service
 
 kb_create_bp = Blueprint("kb_create", __name__, url_prefix="/v1/kb")
 
+@kb_create_bp.route("", methods=["POST"])
 @kb_create_bp.route("/", methods=["POST"])
 def create_kb():
     data = request.json or {}

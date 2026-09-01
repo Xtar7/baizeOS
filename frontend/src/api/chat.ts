@@ -21,11 +21,11 @@ export interface StreamHandle {
  */
 export async function chatCompletionsStream(
   messages: ChatMessageParam[],
-  options: ChatOptions,
+  options: ChatOptions & { conversationId?: string } = {},
   callbacks: StreamCallbacks,
 ): Promise<StreamHandle> {
   const controller = new AbortController()
-  const { model = 'default', rag = false, kbId, debug } = options
+  const { model = 'default', rag = false, kbId, debug, conversationId } = options
 
   const payload: Record<string, unknown> = { model, messages, stream: true }
   if (rag && kbId) {
@@ -33,6 +33,7 @@ export async function chatCompletionsStream(
     payload.kb_id = kbId
   }
   if (debug) payload.debug = true
+  if (conversationId) payload.conversation_id = conversationId
 
   // 异步执行，调用方拿到 handle 即可 abort
   void (async () => {
@@ -141,14 +142,15 @@ export async function chatCompletionsStream(
 /** 非流式对话 — POST /v1/chat/completions */
 export async function chatCompletions(
   messages: ChatMessageParam[],
-  options: ChatOptions = {},
+  options: ChatOptions & { conversationId?: string } = {},
 ) {
-  const { model = 'default', rag = false, kbId } = options
+  const { model = 'default', rag = false, kbId, conversationId } = options
   const payload: Record<string, unknown> = { model, messages, stream: false }
   if (rag && kbId) {
     payload.rag = true
     payload.kb_id = kbId
   }
+  if (conversationId) payload.conversation_id = conversationId
   const res = await fetch('/v1/chat/completions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

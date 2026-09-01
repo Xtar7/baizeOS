@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useSettingsStore } from '@/stores/settings'
+import ConversationList from '@/components/chat/ConversationList.vue'
 import Icon from '@/ui/Icon.vue'
 
 const emit = defineEmits<{ (e: 'navigate'): void }>()
@@ -38,6 +39,11 @@ const isChatActive = computed(() => route.name === 'chat')
         <span>{{ item.label }}</span>
       </RouterLink>
     </nav>
+
+    <!-- 仅在对话页显示：对话列表 -->
+    <div v-show="isChatActive" class="sidebar__conversations">
+      <ConversationList />
+    </div>
 
     <div class="sidebar__foot">
       <button
@@ -143,6 +149,15 @@ const isChatActive = computed(() => route.name === 'chat')
   margin-top: auto;
   padding: 12px;
   border-top: 1px solid var(--line);
+}
+
+.sidebar__conversations {
+  flex: 1 1 auto;
+  min-height: 0; /* 配合 .cl__list 的 overflow:auto */
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--line);
+  margin-top: 6px;
 }
 
 .theme-toggle {

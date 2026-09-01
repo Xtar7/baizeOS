@@ -189,3 +189,50 @@ export interface StreamCallbacks {
   onDone: (meta: { usage?: ChatUsage; references?: ChatReference[]; safety?: ChatSafety }) => void
   onError: (message: string) => void
 }
+
+// ============ 多对话（后端 SQLite 持久化） ============
+
+export type ConversationMessageStatus =
+  | 'streaming'
+  | 'complete'
+  | 'interrupted'
+  | 'error'
+
+export interface Conversation {
+  id: string
+  user_id: string
+  title: string
+  kb_id: string | null
+  message_count: number
+  created_at: number // ms epoch
+  updated_at: number
+  /** 仅 include_messages=true 时返回 */
+  messages?: ConversationMessage[]
+}
+
+export interface ConversationMessage {
+  id: string
+  conversation_id: string
+  user_id: string
+  role: 'user' | 'assistant' | 'system'
+  content: string
+  status: ConversationMessageStatus
+  attachments?: string[] | null
+  references?: ChatReference[] | null
+  usage?: ChatUsage | null
+  safety?: ChatSafety | null
+  created_at: number
+}
+
+export interface ConversationListResponse {
+  object: 'list'
+  data: Conversation[]
+  total: number
+}
+
+export interface CreateConversationPayload {
+  conversation_id?: string
+  title?: string
+  kb_id?: string
+  user_id?: string
+}

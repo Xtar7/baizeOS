@@ -27,6 +27,8 @@ export const useKbStore = defineStore('kb', () => {
     } finally {
       loadingList.value = false
     }
+    // 顺手把 embedding 模型也拉了，让"新建知识库"弹窗打开时立刻有选项
+    void fetchEmbeddingModels().catch(() => undefined)
   }
 
   function invalidate() {

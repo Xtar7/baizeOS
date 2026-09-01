@@ -89,6 +89,7 @@ async function onDrop(e: DragEvent) {
 onMounted(() => {
   void kbStore.fetchList().catch(() => undefined)
   void chat.refreshTmpFiles()
+  void chat.loadConversations()
 })
 
 onBeforeUnmount(() => {
@@ -109,7 +110,7 @@ function pickSuggestion(text: string) {
 
 async function handleNewChat() {
   if (chat.streaming) chat.stop()
-  chat.newChat()
+  await chat.newChat()
   stickToBottom.value = true
   composerRef.value?.focus()
 }

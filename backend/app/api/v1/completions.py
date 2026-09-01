@@ -101,12 +101,16 @@ def chat_completions():
         if not hasattr(result, "__iter__"):
             return jsonify({"error": "流式响应格式异常"}), 500
 
+        # 提前把 json serializer 解引用成普通对象，避免流式生成器
+        # 在 GeneratorExit 后调用 current_app 时 app context 已 pop
+        app_json_dumps = current_app.json.dumps
+
         def sse_format(payload: dict) -> str:
             """
             企业级 SSE 格式封装
             统一走 Flask JSONProvider
             """
-            return "data: " + current_app.json.dumps(
+            return "data: " + app_json_dumps(
                 payload,
                 ensure_ascii=False
             ) + "\n\n"
