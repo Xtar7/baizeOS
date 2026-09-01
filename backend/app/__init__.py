@@ -58,6 +58,17 @@ def create_app(config=None):
     # =============================================
     register_blueprints(app)
 
+    # =============================================
+    # 初始化对话持久化（SQLite，标准库自带）
+    # DB 坏掉不阻塞其他服务启动
+    # =============================================
+    try:
+        from app.services.conversation_store import conversation_store
+        conversation_store.init_db()
+        print("[启动] 对话存储初始化完成")
+    except Exception as e:
+        print(f"[警告] 对话存储初始化失败: {e}")
+
     # 可选：提前加载 llm_service
     # try:
     #     from app.services.llm_service import llm_service

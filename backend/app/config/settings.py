@@ -12,6 +12,8 @@ MODEL_DIR      = PROJECT_ROOT / "models"
 LLM_SCAN_PATH  = MODEL_DIR / "llm"
 KB_ROOT        = PROJECT_ROOT / "KB"              # 知识库根目录（唯一来源）
 LOG_DIR        = PROJECT_ROOT / "logs"
+DATA_DIR       = BACKEND_DIR / "data"
+DB_PATH        = DATA_DIR / "baizeos.db"          # SQLite 对话账本（标准库自带）
 # 测试data文件夹问题
 # print("settings.py 位置:", Path(__file__).resolve())
 # print("计算出的 PROJECT_ROOT:", PROJECT_ROOT)

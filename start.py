@@ -49,14 +49,15 @@ def port_busy(port: int) -> bool:
         return s.connect_ex(("127.0.0.1", port)) == 0
 
 
-def wait_url(url: str, timeout: float = 60.0) -> bool:
-    """轮询直到 URL 可访问（开发服务器就绪）。"""
+def wait_url(url: str, timeout: float = 60.0, expect_status: int = 200) -> bool:
+    """轮询直到 URL 返回 expect_status（默认 200）。"""
     deadline = time.time() + timeout
     while time.time() < deadline:
         try:
-            with urllib.request.urlopen(url, timeout=1.5):
-                return True
-        except (urllib.error.URLError, ConnectionError, OSError):
+            with urllib.request.urlopen(url, timeout=1.5) as resp:
+                if resp.status == expect_status:
+                    return True
+        except (urllib.error.URLError, ConnectionError, OSError, ValueError):
             time.sleep(0.6)
     return False
 
@@ -114,32 +115,41 @@ def main() -> int:
     if not (FRONTEND_DIR / "node_modules").exists():
         run_step([pnpm, "install"], FRONTEND_DIR, "首次运行，安装前端依赖")
 
-    procs: list[subprocess.Popen] = []
+    procs: dict[str, subprocess.Popen] = {}
+    restarted: set[str] = set()  # 已为该角色使用过"自动重启一次"名额
 
     try:
         # ---- 后端（直接调用 venv 内的 Python，避免系统默认 Python 找不到依赖） ----
         if port_busy(5000):
-            warn("端口 5000 已被占用：假定后端已在运行，跳过启动。")
+            warn("端口 5000 已被占用：假定后端已在运行，等待 /v1/health 就绪 …")
         else:
             info("启动后端 Flask …")
             backend_py = BACKEND_DIR / ".venv" / "Scripts" / "python.exe" if IS_WIN else BACKEND_DIR / ".venv" / "bin" / "python"
             if not backend_py.exists():
                 fail(f"未找到后端虚拟环境：{backend_py}")
                 return 1
-            procs.append(subprocess.Popen(
+            procs["backend"] = subprocess.Popen(
                 [str(backend_py), "app.py"],
                 cwd=BACKEND_DIR,
                 env={**os.environ, "PYTHONUNBUFFERED": "1"},
-            ))
+            )
+
+        # ---- 等后端就绪（先后端、再前端、再开浏览器，避开启动竞态） ----
+        if not wait_url(BACKEND_URL + "/v1/health", timeout=90.0, expect_status=200):
+            fail("后端 90 秒内未就绪（/v1/health 未返回 200）")
+            for p in procs.values():
+                kill_tree(p.pid)
+            return 1
+        info("后端就绪：/v1/health → 200")
 
         # ---- 前端 ----
         if port_busy(3000):
             warn("端口 3000 已被占用：Vite 将自动换端口，注意控制台提示。")
         info("启动前端 Vite …")
-        procs.append(subprocess.Popen([pnpm, "run", "dev"], cwd=FRONTEND_DIR))
+        procs["frontend"] = subprocess.Popen([pnpm, "run", "dev"], cwd=FRONTEND_DIR)
 
         # ---- 等前端就绪并打开浏览器 ----
-        if wait_url(FRONTEND_URL, timeout=60):
+        if wait_url(FRONTEND_URL, timeout=60.0):
             info(f"前端就绪，打开浏览器：{FRONTEND_URL}")
             webbrowser.open(FRONTEND_URL)
         else:
@@ -147,20 +157,38 @@ def main() -> int:
 
         info("两个服务运行中，按 Ctrl+C 一起退出。")
 
-        # ---- 守护循环 ----
+        # ---- 守护循环：后端崩联动关前端；前端崩自动重启一次 ----
         while True:
             time.sleep(2)
-            for p in procs:
-                code = p.poll()
-                if code is not None:
-                    fail(f"子进程退出（码 {code}），整体关闭。")
+
+            # 1) 后端是前端数据来源，后端挂了就别挣扎，联动关闭前端
+            backend = procs.get("backend")
+            if backend and backend.poll() is not None:
+                code = backend.returncode
+                fail(f"后端退出（码 {code}），联动关闭前端后退出。")
+                frontend = procs.get("frontend")
+                if frontend and frontend.poll() is None:
+                    kill_tree(frontend.pid)
+                return code or 1
+
+            # 2) 前端崩了允许自动重启一次（Vite/HMR 偶发退出后能自愈）
+            frontend = procs.get("frontend")
+            if frontend and frontend.poll() is not None:
+                code = frontend.returncode
+                if "frontend" in restarted:
+                    fail(f"前端再次退出（码 {code}），已达到自动重启上限，整体关闭。")
                     return code or 1
+                warn(f"前端退出（码 {code}），尝试自动重启一次 …")
+                restarted.add("frontend")
+                procs["frontend"] = subprocess.Popen(
+                    [pnpm, "run", "dev"], cwd=FRONTEND_DIR
+                )
     except KeyboardInterrupt:
         print(flush=True)
         info("正在退出 …")
         return 0
     finally:
-        for p in procs:
+        for p in procs.values():
             kill_tree(p.pid)
 
 

@@ -219,6 +219,10 @@ KB/
 
 # Backend data folder
 backend/data/
+backend/data/*.db
+backend/data/*.db-journal
+backend/data/*.db-wal
+backend/data/*.db-shm
 
 # Models folders
 models/llms/
