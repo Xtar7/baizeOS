@@ -10,7 +10,7 @@
 [![Flask](https://img.shields.io/badge/Backend-Flask%20%2B%20llama--cpp-C96342.svg)](#tech-stack)
 [![Local First](https://img.shields.io/badge/Privacy-100%25%20local%20inference-1f1e1d.svg)](#privacy)
 [![Stars](https://img.shields.io/github/stars/Xtar7/baizeOS?style=flat)](../../stargazers)
-[![zh-CN](https://img.shields.io/badge/语言-中文-232323.svg)](./README.zh-CN.md)
+[![zh-CN](https://img.shields.io/badge/语言-中文-232323.svg)](./README.md)
 
 <br>
 
@@ -194,7 +194,7 @@ baizeOS/
 ├─ models/                  # (runtime) GGUF + embedding models
 ├─ DESIGN.md                # design tokens & component contract
 ├─ PRODUCT.md               # product context
-└─ LICENSE                  # MIT
+└─ LICENSE                  # GPL-3.0
 ```
 
 ---

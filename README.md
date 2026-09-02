@@ -11,7 +11,6 @@
 [![本地优先](https://img.shields.io/badge/隐私-100%25%20本地推理-1f1e1d.svg)](#隐私)
 [![Stars](https://img.shields.io/github/stars/Xtar7/baizeOS?style=flat)](../../stargazers)
 [![en](https://img.shields.io/badge/lang-English-232323.svg)](./README.en.md)
-[![en](https://img.shields.io/badge/lang-English-232323.svg)](./README.en.md)
 
 <br>
 <img width="1280" height="640" alt="hero" src="https://github.com/user-attachments/assets/af97064f-5b70-4d15-be72-cba5e7d89d42" />
@@ -193,9 +192,9 @@ baizeOS/
 ├─ models/                  # （运行时）GGUF + 嵌入模型
 ├─ DESIGN.md                # 设计令牌 & 组件契约
 ├─ PRODUCT.md               # 产品上下文
-├─ README.md                # 英文 README
-├─ README.zh-CN.md          # 本文件
-└─ LICENSE                  # MIT
+├─ README.md                # 中文版（主入口）
+├─ README.en.md             # 英文版
+└─ LICENSE                  # GPL-3.0
 ```
 
 ---
