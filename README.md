@@ -61,6 +61,12 @@ baizeOS（白泽）是一个面向单用户的 RAG 工作站。技术栈刻意�
 
 ## 截图
 
+真实使用中的一轮对话——本地模型流式吐出代码块，底部是该轮的 token 统计：
+
+![真实对话：本地模型回答与 token 统计](./screenshots/chat-reply.png)
+
+其余界面：
+
 | 对话 | 知识库 | 设置 |
 | :---: | :---: | :---: |
 | ![对话](./.impeccable/review/desktop.png) | ![知识库](./.impeccable/review/kb.png) | ![设置](./.impeccable/review/settings.png) |

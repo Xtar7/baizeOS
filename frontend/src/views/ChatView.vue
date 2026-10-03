@@ -89,7 +89,7 @@ async function onDrop(e: DragEvent) {
 onMounted(() => {
   void kbStore.fetchList().catch(() => undefined)
   void chat.refreshTmpFiles()
-  void chat.loadConversations()
+  void chat.initConversation()
 })
 
 onBeforeUnmount(() => {

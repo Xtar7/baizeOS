@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { reactive, ref, watch } from 'vue'
 import type { StreamHandle } from '@/api/chat'
 import { chatCompletionsStream } from '@/api/chat'
+import { ApiError } from '@/api/request'
 import * as fileApi from '@/api/file'
 import * as convApi from '@/api/conversations'
 import type {
@@ -10,6 +11,7 @@ import type {
   ChatSafety,
   ChatUsage,
   Conversation,
+  ConversationMessage,
   TmpFile,
 } from '@/types/api'
 
@@ -26,8 +28,17 @@ export interface ChatMsg {
   error?: boolean
 }
 
-/** 旧 key：仅作为"未连上后端时的离线草稿"读，不再主动写。 */
+/**
+ * 旧版把整份对话（消息正文 + chat_id）冻在 localStorage 里，多对话上线后
+ * 这份存档再没被更新过，却仍在每次启动时被原样恢复 —— 表现就是"新开了对话，
+ * 一刷新又回到之前某次失败的页面"，而且永远删不掉。直接清掉。
+ */
 const LEGACY_DRAFT_KEY = 'baizeos.conversation'
+/** 当前会话 id —— 只记 id 不记内容，刷新后据此回后端拉真实历史。 */
+const ACTIVE_CONV_KEY = 'baizeos.activeConversationId'
+
+/** 后端 id 形如 uuid4().hex（32 位小写 hex），用来挡掉手改坏的值 */
+const CONV_ID_RE = /^[0-9a-f]{32}$/
 
 function uid(): string {
   // 32 hex 字符（与后端 uuid.uuid4().hex 对齐），便于直接当 conversation_id
@@ -40,15 +51,41 @@ function uid(): string {
   return s.slice(0, 32)
 }
 
-interface LegacyDraft {
-  chatId: string
-  ragEnabled: boolean
-  kbId: string
-  messages: ChatMsg[]
+function readActiveId(): string {
+  try {
+    const raw = localStorage.getItem(ACTIVE_CONV_KEY)
+    return raw && CONV_ID_RE.test(raw) ? raw : ''
+  } catch {
+    return '' // 隐私模式等场景下 localStorage 可能直接抛
+  }
+}
+
+function persistActiveId(id: string) {
+  try {
+    if (id) localStorage.setItem(ACTIVE_CONV_KEY, id)
+    else localStorage.removeItem(ACTIVE_CONV_KEY)
+  } catch {
+    /* 写不进去只影响"刷新后回到哪条会话"，聊天本身不受影响 */
+  }
+}
+
+/** 后端消息 → 界面消息 */
+function toMsgs(list?: ConversationMessage[] | null): ChatMsg[] {
+  return (list ?? []).map((m) => ({
+    id: m.id,
+    role: m.role as 'user' | 'assistant',
+    content: m.content,
+    attachments: m.attachments ?? undefined,
+    references: m.references ?? undefined,
+    usage: m.usage ?? undefined,
+    safety: m.safety ?? undefined,
+    streaming: false,
+    error: m.status === 'error',
+  }))
 }
 
 export const useChatStore = defineStore('chat', () => {
-  const chatId = ref<string>(uid())
+  const chatId = ref<string>(readActiveId() || uid())
   const messages = ref<ChatMsg[]>([])
   const ragEnabled = ref(false)
   const selectedKbId = ref<string>('')
@@ -64,36 +101,17 @@ export const useChatStore = defineStore('chat', () => {
 
   let handle: StreamHandle | null = null
 
-  // ---------- 离线降级：只读旧 localStorage，新代码不写 ----------
-  function restoreLegacyDraft() {
-    try {
-      const raw = localStorage.getItem(LEGACY_DRAFT_KEY)
-      if (!raw) return
-      const shape = JSON.parse(raw) as LegacyDraft
-      if (shape.chatId) chatId.value = shape.chatId
-      ragEnabled.value = Boolean(shape.ragEnabled)
-      selectedKbId.value = shape.kbId ?? ''
-      messages.value = Array.isArray(shape.messages)
-        ? shape.messages.map((m) => ({ ...m, streaming: false }))
-        : []
-    } catch {
-      /* 损坏的存档直接丢弃 */
-    }
+  // 清掉旧版离线草稿：留着只会让"回到某次失败的对话"这件事反复发生
+  try {
+    localStorage.removeItem(LEGACY_DRAFT_KEY)
+  } catch {
+    /* 同上，写不了就算了 */
   }
-  restoreLegacyDraft()
 
-  // 流式期间每个 delta 都会变更 messages，防抖后只写一条标记；不写消息内容
-  let persistTimer = 0
-  watch(
-    [messages, chatId, ragEnabled, selectedKbId],
-    () => {
-      window.clearTimeout(persistTimer)
-      persistTimer = window.setTimeout(() => {
-        // 新方案下不再写 localStorage；保留 watch 只是为了让 onChange 副作用链不断
-      }, 300)
-    },
-    { deep: true },
-  )
+  // 首屏也写一次：新会话在发出第一条消息后就已经存在于后端，
+  // 但 chatId 全程不变，只靠 watch 的话这次切换不会被记录下来。
+  watch(chatId, persistActiveId)
+  persistActiveId(chatId.value)
 
   // ============ 临时附件 ============
   async function refreshTmpFiles() {
@@ -183,21 +201,42 @@ export const useChatStore = defineStore('chat', () => {
     messages.value = []
     try {
       const conv = await convApi.getConversation(id, true)
-      messages.value = (conv.messages ?? []).map((m) => ({
-        id: m.id,
-        role: m.role as 'user' | 'assistant',
-        content: m.content,
-        attachments: m.attachments ?? undefined,
-        references: m.references ?? undefined,
-        usage: m.usage ?? undefined,
-        safety: m.safety ?? undefined,
-        streaming: false,
-        error: m.status === 'error',
-      }))
+      if (chatId.value !== id) return // 拉取期间又切走了，丢弃这次结果
+      messages.value = toMsgs(conv.messages)
     } catch (e) {
       console.warn('[chat] switchConversation 拉消息失败', e)
     }
     void refreshTmpFiles()
+  }
+
+  /**
+   * 首屏引导：回到上次停留的那条对话；没有存档、或存档指向的对话已被删除，
+   * 就停在一张干净的新对话页。
+   *
+   * 关键在于"取回"是一次**向后端核对**过的事，而不是无条件相信 localStorage ——
+   * 无条件恢复存档正是"刷新后回到某次失败的老对话、且删不掉"的成因。
+   */
+  async function initConversation() {
+    void loadConversations() // 侧边栏列表与恢复当前对话互不依赖，并行即可
+
+    const saved = readActiveId()
+    if (!saved) return // 首次访问：chatId 已经是刚生成的新 id，停在空白页
+
+    try {
+      const conv = await convApi.getConversation(saved, true)
+      if (chatId.value !== saved) return // 引导期间用户已切换/新开，交给当前状态
+      messages.value = toMsgs(conv.messages)
+      void refreshTmpFiles()
+    } catch (e) {
+      const status = e instanceof ApiError ? e.status : 0
+      if (status === 404) {
+        // 对话已被删除：忘掉这个存档，重新开一页干净的
+        chatId.value = uid()
+        messages.value = []
+      }
+      // status 0 = 后端没起，其他错误同理：保留存档，下次刷新还能回到这里
+      console.warn('[chat] initConversation 恢复上次对话失败', e)
+    }
   }
 
   async function deleteConversation(id: string) {
@@ -350,6 +389,7 @@ export const useChatStore = defineStore('chat', () => {
     conversations,
     conversationsLoading,
     loadConversations,
+    initConversation,
     switchConversation,
     deleteConversation,
     renameConversation,

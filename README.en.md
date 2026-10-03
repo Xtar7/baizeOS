@@ -63,6 +63,12 @@ The product follows three rules:
 
 ## Screenshots
 
+A real turn from actual use — the local model streaming out a code block, with that turn's token count underneath:
+
+![Real conversation: local model answer and token usage](./screenshots/chat-reply.png)
+
+The rest of the UI:
+
 | Conversation | Knowledge base | Settings |
 | :---: | :---: | :---: |
 | ![conversation](./.impeccable/review/desktop.png) | ![kb](./.impeccable/review/kb.png) | ![settings](./.impeccable/review/settings.png) |
