@@ -138,10 +138,23 @@ class ConversationStore:
                 (conv_id,),
             ).fetchone()
             if row:
-                conn.execute(
-                    "UPDATE conversation SET updated_at=? WHERE id=?",
-                    (now, conv_id),
-                )
+                # 已存在：补标题。前端会先 POST /v1/conversations 建一条空会话，
+                # 真正的首条消息随后才发过来 —— 若这里只更新 updated_at，
+                # 首条消息带来的标题就永远写不进去，侧边栏全是无名会话。
+                # 仅在当前标题为空时写入，不覆盖用户手动改过的标题。
+                if title:
+                    conn.execute(
+                        """UPDATE conversation
+                           SET updated_at=?,
+                               title=CASE WHEN title IS NULL OR title='' THEN ? ELSE title END
+                           WHERE id=?""",
+                        (now, title, conv_id),
+                    )
+                else:
+                    conn.execute(
+                        "UPDATE conversation SET updated_at=? WHERE id=?",
+                        (now, conv_id),
+                    )
                 return conv_id
             conn.execute(
                 """INSERT INTO conversation(id,user_id,title,kb_id,message_count,created_at,updated_at)
@@ -290,6 +303,50 @@ class ConversationStore:
                 "SELECT * FROM message WHERE id=?", (msg_id,)
             ).fetchone()
         return dict(row) if row else None
+
+    # ---------------- 请求审计 ----------------
+    def log_request(
+        self,
+        conversation_id: str,
+        message_id: Optional[str] = None,
+        model: Optional[str] = None,
+        prompt_name: Optional[str] = None,
+        use_rag: bool = False,
+        kb_id: Optional[str] = None,
+        stream: bool = False,
+        http_status: Optional[int] = None,
+        error: Optional[str] = None,
+        duration_ms: Optional[int] = None,
+        user_id: str = "local",
+    ) -> Optional[str]:
+        """写一条请求审计。审计失败绝不能影响聊天，所以整段吞异常。"""
+        try:
+            req_id = self.new_id()
+            with self._connect() as conn:
+                conn.execute(
+                    """INSERT INTO request_log(id,conversation_id,message_id,user_id,model,
+                       prompt_name,use_rag,kb_id,stream,http_status,error,duration_ms,created_at)
+                       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    (
+                        req_id, conversation_id, message_id, user_id, model, prompt_name,
+                        int(bool(use_rag)), kb_id, int(bool(stream)), http_status, error,
+                        duration_ms, int(time.time() * 1000),
+                    ),
+                )
+            return req_id
+        except Exception as e:
+            logger.warning(f"[ConversationStore] 审计写入失败（忽略）: {e}")
+            return None
+
+    def list_request_logs(self, conversation_id: str, limit: int = 100) -> List[Dict[str, Any]]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                """SELECT * FROM request_log
+                   WHERE conversation_id=?
+                   ORDER BY created_at DESC LIMIT ?""",
+                (conversation_id, limit),
+            ).fetchall()
+        return [dict(r) for r in rows]
 
 
 # 模块级单例

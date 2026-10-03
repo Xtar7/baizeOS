@@ -38,8 +38,11 @@ def register_blueprints(app):
 
             try:
                 module = importlib.import_module(module_name)
-            except ImportError as e:
+            except Exception as e:
+                # 这里不能只 logger.warning：没有配置 logging 时前端表现为
+                # "接口 404"，排查成本极高。直接打到 stdout 醒目提示。
                 logger.warning(f"导入模块失败 {module_name}: {e}")
+                print(f"[API][ERROR] 导入模块失败 {module_name}: {type(e).__name__}: {e}", flush=True)
                 continue
 
             for attr_name in dir(module):
@@ -57,3 +60,5 @@ def register_blueprints(app):
 
     if registered_count == 0:
         logger.warning("没有发现任何蓝图")
+    else:
+        print(f"[API] 共注册 {registered_count} 个蓝图", flush=True)

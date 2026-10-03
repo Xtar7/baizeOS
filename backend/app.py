@@ -1,38 +1,38 @@
 # backend/app.py
+import os
 import sys
 from pathlib import Path
-import torch
 
 project_root = Path(__file__).resolve().parent
 sys.path.insert(0, str(project_root))
 
 # ------------------------------
 from app import create_app
-from app.services.embedding_factory import scan_embedding_models
 from app.utils.json_provider import NumpyJSONProvider
+
 app = create_app()
 app.json = NumpyJSONProvider(app)
-# 启动时打印关键信息
+
+# 启动诊断：注意不要在这里 import torch / 扫描 embedding —— create_app()
+# 已经做过一次，重复扫描只会拖慢启动并制造重复日志。
 print("\n=== 系统启动诊断 ===")
 print(f"PROJECT_ROOT: {project_root}")
-print(f"GPU 可用: {torch.cuda.is_available()}")
-if torch.cuda.is_available():
-    print(f"GPU 设备: {torch.cuda.get_device_name(0)}")
-    print(f"CUDA 版本: {torch.version.cuda}")
 print("=====================\n")
-
-# 扫描 embedding 模型（包括 GGUF）
-scan_embedding_models()
 
 print("\n=== 所有已注册路由 ===")
-for rule in app.url_map.iter_rules():
-    print(f"{rule.methods} → {rule}")
+for rule in sorted(app.url_map.iter_rules(), key=str):
+    print(f"{sorted(rule.methods - {'HEAD', 'OPTIONS'})} → {rule}")
 print("=====================\n")
 
+
 if __name__ == "__main__":
+    # reloader 会 fork 出第二个进程再把整个应用（含 4~5GB 的 GGUF 权重）
+    # 加载一遍，内存直接翻倍。在单进程下用 threaded 即可满足 SSE 并发。
+    use_reloader = os.getenv("BAIZE_FLASK_RELOAD", "0") == "1"
     app.run(
         host="0.0.0.0",
         port=5000,
-        debug=True,
-        use_reloader=True,
+        debug=app.config.get("DEBUG", False),
+        use_reloader=use_reloader,
+        threaded=True,
     )

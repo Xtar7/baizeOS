@@ -22,6 +22,28 @@ def _err(msg: str, status: int = 400, detail: str | None = None):
     return jsonify(payload), status
 
 
+def _public_message(row: dict) -> dict:
+    """DB 列名 → 前端契约字段名。
+
+    库里按职责分开存（ref_meta / usage_json / safety_json），前端
+    ConversationMessage 期望的是 references / usage / safety，
+    不做这层映射的话历史消息的引用和 token 统计永远是 undefined。
+    """
+    return {
+        "id": row["id"],
+        "conversation_id": row["conversation_id"],
+        "user_id": row["user_id"],
+        "role": row["role"],
+        "content": row["content"],
+        "status": row["status"],
+        "attachments": row.get("attachments"),
+        "references": row.get("ref_meta"),
+        "usage": row.get("usage_json"),
+        "safety": row.get("safety_json"),
+        "created_at": row["created_at"],
+    }
+
+
 @conversations_bp.route("", methods=["GET"])
 def list_():
     """GET /v1/conversations?user_id=local&limit=200"""
@@ -59,7 +81,7 @@ def get_one(conv_id: str):
     if not conv:
         return _err("conversation not found", 404)
     if request.args.get("include_messages", "false").lower() == "true":
-        conv["messages"] = conversation_store.list_messages(conv_id)
+        conv["messages"] = [_public_message(m) for m in conversation_store.list_messages(conv_id)]
     return jsonify(conv), 200
 
 

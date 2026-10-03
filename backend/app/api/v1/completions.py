@@ -1,12 +1,36 @@
 # backend/app/api/v1/completions.py
 import logging
+import time
 from flask import Blueprint, request, jsonify, Response, current_app
-from app.services.llm_service import llm_service
+from app.services.llm_service import llm_service, LLMUnavailableError
 from app.services.rag_service import rag_service
 from app.services.conversation_store import conversation_store
 logger = logging.getLogger(__name__)
 
 chat_bp = Blueprint("chat", __name__, url_prefix="/v1")
+
+
+def _audit(conv_id, message_id, started_at, model, prompt_name, use_rag, kb_id, data,
+           http_status=None, error=None):
+    """写一条请求审计；没有 conversation_id 就是未持久化的匿名调用，跳过。"""
+    if not conv_id:
+        return
+    try:
+        conversation_store.log_request(
+            conversation_id=conv_id,
+            message_id=message_id,
+            model=model,
+            prompt_name=prompt_name,
+            use_rag=use_rag,
+            kb_id=kb_id,
+            stream=True,
+            http_status=http_status,
+            error=error,
+            duration_ms=int((time.perf_counter() - started_at) * 1000),
+            user_id=(data or {}).get("user_id", "local"),
+        )
+    except Exception as e:
+        logger.warning(f"[audit] 写入失败（忽略）: {e}")
 
 
 @chat_bp.route("/chat/completions", methods=["POST"])
@@ -55,22 +79,46 @@ def chat_completions():
             persist_conv_id = None
 
         # ========= 调用服务层 =========
-        if use_rag and kb_id:
-            result = rag_service.rag_chat(
-                messages=messages,
-                kb_id=kb_id,
-                stream=stream,
-                debug=debug,
-                model=model,
-                prompt_name=prompt_name,
-            )
-        else:
-            result = llm_service.chat_completions(
-                messages=messages,
-                stream=stream,
-                model=model,
-                prompt_name=prompt_name,
-            )
+        # 模型不可用（显存/内存不足、GGUF 缺失）属于可恢复状态：
+        # 返回 503 + 明确文案，前端展示提示而不是笼统的"服务器内部错误"。
+        started_at = time.perf_counter()
+        try:
+            if use_rag and kb_id:
+                result = rag_service.rag_chat(
+                    messages=messages,
+                    kb_id=kb_id,
+                    stream=stream,
+                    debug=debug,
+                    model=model,
+                    prompt_name=prompt_name,
+                )
+            else:
+                result = llm_service.chat_completions(
+                    messages=messages,
+                    stream=stream,
+                    model=model,
+                    prompt_name=prompt_name,
+                )
+        except LLMUnavailableError as e:
+            logger.warning(f"[chat] 模型不可用: {e}")
+            if persist_conv_id:
+                conversation_store.log_request(
+                    conversation_id=persist_conv_id,
+                    model=model,
+                    prompt_name=prompt_name,
+                    use_rag=use_rag,
+                    kb_id=kb_id,
+                    stream=stream,
+                    http_status=503,
+                    error=str(e),
+                    duration_ms=int((time.perf_counter() - started_at) * 1000),
+                    user_id=data.get("user_id", "local"),
+                )
+            return jsonify({
+                "error": "llm_unavailable",
+                "detail": str(e),
+                "llm": llm_service.status(),
+            }), 503
 
         # ========= 非流式 =========
         if not stream:
@@ -89,7 +137,23 @@ def chat_completions():
                         msg_id=placeholder_id,
                         content=content,
                         status="complete",
+                        # 与流式路径对齐：RAG 的引用与安全元数据同样要落库，
+                        # 否则非流式会话重开后引用列表是空的。
+                        references=result.get("references"),
                         usage=result.get("usage"),
+                        safety=result.get("safety"),
+                    )
+                    conversation_store.log_request(
+                        conversation_id=persist_conv_id,
+                        message_id=placeholder_id,
+                        model=result.get("model") or model,
+                        prompt_name=prompt_name,
+                        use_rag=use_rag,
+                        kb_id=kb_id,
+                        stream=False,
+                        http_status=200,
+                        duration_ms=int((time.perf_counter() - started_at) * 1000),
+                        user_id=data.get("user_id", "local"),
                     )
                 except Exception as persist_err:
                     logger.warning(f"[persist] 非流式落库失败: {persist_err}")
@@ -128,9 +192,12 @@ def chat_completions():
         # 累积给后端落库用（闭包变量）
         accumulated_text: list[str] = []
         last_meta: dict = {}
+        saw_done_frame = False
+        last_id: str | None = None
+        last_usage: dict | None = None
 
         def generate():
-            nonlocal last_meta
+            nonlocal last_meta, saw_done_frame, last_id, last_usage
             try:
                 for chunk in result:
 
@@ -139,6 +206,13 @@ def chat_completions():
 
                     # 保证最基本字段存在（防止下游炸）
                     chunk.setdefault("object", "chat.completion.chunk")
+
+                    # 服务层的收尾 chunk 把 usage 放在顶层而不是 done 帧里，
+                    # 这里顺手留档，补 done 帧时回填
+                    if chunk.get("usage"):
+                        last_usage = chunk.get("usage")
+                    if chunk.get("id"):
+                        last_id = chunk.get("id")
 
                     # 累计 delta 文本（供 finalize 用）
                     try:
@@ -152,13 +226,41 @@ def chat_completions():
 
                     # 收尾帧带 usage/references/safety（completions 自定义 done 帧）
                     if chunk.get("done"):
+                        saw_done_frame = True
+                        # RAG 路径的 done 帧 usage 为 null（真实值在它前一个
+                        # chunk 的顶层），这里回填，避免 usage 永久丢失。
                         last_meta = {
-                            "usage": chunk.get("usage"),
+                            "usage": chunk.get("usage") or last_usage,
                             "references": chunk.get("references"),
                             "safety": chunk.get("safety"),
                         }
+                        # 同样回填给客户端，前端的实时 token 统计才有值
+                        if not chunk.get("usage") and last_usage:
+                            chunk["usage"] = last_usage
 
                     yield sse_format(chunk)
+
+                # 服务层若没自己产出 done 帧，这里补一个。
+                # 契约（docs/API调用方案.md 3.3）要求 done 帧先于 [DONE]：
+                # 前端靠它清掉 streaming 标志并回填 usage/references/safety，
+                # 缺了它前端会永远停在"生成中"，发不出第二条消息。
+                if not saw_done_frame:
+                    usage = last_meta.get("usage") or last_usage
+                    yield sse_format({
+                        "id": last_id or "chatcmpl-stream",
+                        "object": "chat.completion.chunk",
+                        "done": True,
+                        "usage": usage,
+                        "references": last_meta.get("references") or [],
+                        "safety": last_meta.get("safety"),
+                    })
+                    # 补出来的 usage 也要进 last_meta，否则下面的 finalize
+                    # 落库时 usage 为空，前端重开会话看不到 token 统计。
+                    last_meta = {
+                        "usage": usage,
+                        "references": last_meta.get("references") or [],
+                        "safety": last_meta.get("safety"),
+                    }
 
                 # 标准 OpenAI 结束信号
                 yield "data: [DONE]\n\n"
@@ -180,11 +282,17 @@ def chat_completions():
 
                 if isinstance(stream_error, GeneratorExit):
                     # 客户端主动断连（abort/刷新/关闭）→ 让 WSGI 正常关闭
+                    _audit(persist_conv_id, persist_assistant_msg_id, started_at,
+                           model, prompt_name, use_rag, kb_id, data,
+                           http_status=None, error="client_disconnected")
                     raise
                 error_payload = {
                     "error": "stream 内部错误",
                     "detail": str(stream_error)
                 }
+                _audit(persist_conv_id, persist_assistant_msg_id, started_at,
+                       model, prompt_name, use_rag, kb_id, data,
+                       http_status=500, error=str(stream_error))
                 yield sse_format(error_payload)
                 return
 
@@ -201,6 +309,9 @@ def chat_completions():
                     )
                 except Exception as persist_err:
                     logger.warning(f"[persist] 流式 finalize 失败: {persist_err}")
+
+            _audit(persist_conv_id, persist_assistant_msg_id, started_at,
+                   model, prompt_name, use_rag, kb_id, data, http_status=200)
 
         return Response(
             generate(),

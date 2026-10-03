@@ -238,3 +238,6 @@ ui-ux-pro-max-skill-2.7.0/
 !README*.md
 !DESIGN.md
 !PRODUCT.md
+
+# 前端无头测试产物（Edge 渲染的 DOM dump 与临时 profile）
+frontend/tests/.dump/

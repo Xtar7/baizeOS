@@ -95,6 +95,22 @@ AUTO_REGISTER_MODELS = True
 # 建议新增：GPU 配置（用于 llama.cpp）
 USE_GPU = True                                     # 或从环境变量读取
 N_GPU_LAYERS = -1 if USE_GPU else 0                # -1 = 全 offload 到 GPU
-
 # 建议新增：日志级别控制（方便调试）
 LLAMA_CPP_VERBOSE = False                          # 是否打印 llama.cpp 详细加载日志（生产 False）
+
+# ---- LLM 运行时参数（可用环境变量覆盖，无需改代码）----
+# 显存不足时 -1（全量 offload）会直接让 llama_context 创建失败，
+# 加载器会按 LLM_LOAD_LADDER 自动降级，所以这里的值只是"首选尝试值"。
+LLM_N_CTX        = int(os.getenv("BAIZE_LLM_N_CTX", 4096))
+LLM_N_GPU_LAYERS = int(os.getenv("BAIZE_LLM_N_GPU_LAYERS", N_GPU_LAYERS))
+LLM_N_THREADS    = int(os.getenv("BAIZE_LLM_N_THREADS", 0)) or max(1, (os.cpu_count() or 4) // 2)
+LLM_N_BATCH      = int(os.getenv("BAIZE_LLM_N_BATCH", 512))
+# 降级阶梯：按顺序尝试，第一个成功的即生效。设为空则不做自动降级（只试首选值）。
+LLM_LOAD_LADDER = [
+    {"n_ctx": LLM_N_CTX, "n_gpu_layers": LLM_N_GPU_LAYERS},
+    {"n_ctx": 2048, "n_gpu_layers": LLM_N_GPU_LAYERS},
+    {"n_ctx": 2048, "n_gpu_layers": 0},
+    {"n_ctx": 1024, "n_gpu_layers": 0},
+]
+# 进程启动时预加载模型。关掉则首次聊天请求时才加载（首字更慢，但启动更快）。
+LLM_PRELOAD = os.getenv("BAIZE_LLM_PRELOAD", "1") == "1"

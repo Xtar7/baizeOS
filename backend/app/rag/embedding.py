@@ -1,5 +1,4 @@
 # app/rag/embedding.py
-from sentence_transformers import SentenceTransformer
 import os
 import logging
 import numpy as np
@@ -10,11 +9,16 @@ class EmbeddingService:
     """
     支持本地路径或 huggingface id 的 embedding 服务（优先本地）
     """
+
     def __init__(self, model_name_or_path: str = None, default_model="BAAI/bge-small-zh-v1.5"):
         """
         model_name_or_path: 本地绝对路径 或 huggingface 模型名
         """
         try:
+            # 懒加载 sentence_transformers（会连带 torch，吃掉 ~1GB 宿主内存）。
+            # 与 4~5GB 的生成 GGUF 同进程时很容易把内存/pagefile 撑爆。
+            from sentence_transformers import SentenceTransformer
+
             if model_name_or_path and os.path.isdir(model_name_or_path):
                 logger.info(f"加载本地模型: {model_name_or_path}")
                 self.model = SentenceTransformer(model_name_or_path)

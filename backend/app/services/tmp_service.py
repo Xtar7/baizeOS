@@ -143,8 +143,10 @@ class TmpService:
                 if not ext_dir.is_dir():
                     continue
 
-                # 文件名格式: {tmp_file_id}{ext}
-                target = ext_dir / f"{tmp_file_id_clean}{ext_dir.name}"
+                # 上传时路径是 data/{date}/{chat_id}/{ext}/{tmp_file_id}{ext}，
+                # 而 ext_dir.name 是去掉点的扩展名（"txt"），所以这里必须把点补回去。
+                # 少了这个点 target 永远不存在，删除会静默返回 deleted_count=0。
+                target = ext_dir / f"{tmp_file_id_clean}.{ext_dir.name}"
                 if target.exists() and target.is_file():
                     try:
                         target.unlink()

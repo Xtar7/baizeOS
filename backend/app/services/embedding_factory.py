@@ -11,8 +11,24 @@ import numpy as np
 from pathlib import Path
 from typing import Dict, List, Optional, Union
 
-from sentence_transformers import SentenceTransformer
 from app.config.settings import PROJECT_ROOT
+
+# sentence_transformers 会连带加载 torch，宿主内存占用 1GB+。而 7B GGUF 在
+# llama.cpp 里要吃掉 4~5GB，两者同进程很容易把内存/pagefile 撑爆，进而让
+# llama_context 创建失败（甚至触发 C 层 GGML_ASSERT 直接 abort）。
+# 这里改成真正的懒加载：只有真的要算 embedding 时才付这份内存。
+SentenceTransformer = None
+_ST_LOADED = False
+
+
+def _get_sentence_transformer():
+    global SentenceTransformer, _ST_LOADED
+    if not _ST_LOADED:
+        from sentence_transformers import SentenceTransformer as _ST
+
+        SentenceTransformer = _ST
+        _ST_LOADED = True
+    return SentenceTransformer
 
 # 新增配置导入（如果 settings 中不存在这些配置，需要添加）
 try:

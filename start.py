@@ -87,6 +87,22 @@ def run_step(cmd: list[str], cwd: Path, what: str) -> None:
         sys.exit(proc.returncode)
 
 
+def find_vite() -> list[str] | None:
+    """
+    已装依赖时直接跑 node_modules 里的 vite，绕开包管理器。
+
+    为什么不用 `pnpm run dev`：corepack 会拉最新 pnpm，而 pnpm 9+ 与本仓库
+    的 lockfileVersion 6 不兼容，会重写 lockfile 并以 ERR_PNPM_IGNORED_BUILDS
+    失败 —— 表现为"前端起不来"。package.json 里的 packageManager 字段已经
+    钉住了 pnpm@8，但直接把 vite 跑起来更快也更少依赖。
+    """
+    name = "vite.cmd" if IS_WIN else "vite"
+    local = FRONTEND_DIR / "node_modules" / ".bin" / name
+    if local.exists():
+        return [str(local)]
+    return None
+
+
 def main() -> int:
     # Windows 控制台默认 GBK，强制 UTF-8 避免中文乱码
     try:
@@ -104,16 +120,23 @@ def main() -> int:
         fail("目录不完整：需要与 start.py 同级的 backend/ 与 frontend/")
         return 1
 
-    pnpm = shutil.which("pnpm")
-    if not pnpm:
-        warn("未找到 pnpm，回退使用 npm（建议：npm i -g pnpm）")
-        pnpm = shutil.which("npm")
+    # ---- 解析前端启动命令 ----
+    vite = find_vite()
+    if vite is None:
+        # 没装依赖才需要包管理器
+        pnpm = shutil.which("pnpm")
         if not pnpm:
-            fail("未找到 npm/pnpm，请先安装 Node.js：https://nodejs.org/")
-            return 1
-    # ---- 前端依赖 ----
-    if not (FRONTEND_DIR / "node_modules").exists():
+            warn("未找到 pnpm，回退使用 npm（建议：npm i -g pnpm@8）")
+            pnpm = shutil.which("npm")
+            if not pnpm:
+                fail("未找到 npm/pnpm，请先安装 Node.js：https://nodejs.org/")
+                return 1
+        # ---- 前端依赖 ----
         run_step([pnpm, "install"], FRONTEND_DIR, "首次运行，安装前端依赖")
+        vite = find_vite()
+        if vite is None:
+            fail("安装依赖后仍未找到 frontend/node_modules/.bin/vite")
+            return 1
 
     procs: dict[str, subprocess.Popen] = {}
     restarted: set[str] = set()  # 已为该角色使用过"自动重启一次"名额
@@ -144,14 +167,21 @@ def main() -> int:
 
         # ---- 前端 ----
         if port_busy(3000):
-            warn("端口 3000 已被占用：Vite 将自动换端口，注意控制台提示。")
+            fail(
+                "端口 3000 已被占用。请先关掉占用它的进程"
+                "（多半是上一次没退干净的 vite），再重新启动。"
+            )
+            return 1  # finally 会把后端一并收掉
         info("启动前端 Vite …")
-        procs["frontend"] = subprocess.Popen([pnpm, "run", "dev"], cwd=FRONTEND_DIR)
+        procs["frontend"] = subprocess.Popen(vite, cwd=FRONTEND_DIR)
 
         # ---- 等前端就绪并打开浏览器 ----
         if wait_url(FRONTEND_URL, timeout=60.0):
             info(f"前端就绪，打开浏览器：{FRONTEND_URL}")
-            webbrowser.open(FRONTEND_URL)
+            if os.getenv("BAIZE_NO_BROWSER") == "1":
+                info("BAIZE_NO_BROWSER=1，跳过自动打开浏览器")
+            else:
+                webbrowser.open(FRONTEND_URL)
         else:
             warn("60 秒内未检测到前端就绪（首次启动编译可能较慢），可手动访问 " + FRONTEND_URL)
 
@@ -180,9 +210,7 @@ def main() -> int:
                     return code or 1
                 warn(f"前端退出（码 {code}），尝试自动重启一次 …")
                 restarted.add("frontend")
-                procs["frontend"] = subprocess.Popen(
-                    [pnpm, "run", "dev"], cwd=FRONTEND_DIR
-                )
+                procs["frontend"] = subprocess.Popen(vite, cwd=FRONTEND_DIR)
     except KeyboardInterrupt:
         print(flush=True)
         info("正在退出 …")

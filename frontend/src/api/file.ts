@@ -1,5 +1,9 @@
 import type { TmpDeleteResponse, TmpFile, TmpListResponse } from '@/types/api'
-import api from './request'
+import { apiPost } from './request'
+
+/*
+ * 约定：本文件的每个函数都直接返回**响应体**（不是 AxiosResponse）。
+ */
 
 /**
  * 上传临时文件（聊天附件）— POST /v1/files/upload (multipart/form-data)
@@ -9,16 +13,14 @@ export function uploadTmpFile(chatId: string, file: File) {
   const formData = new FormData()
   formData.append('file', file) // 字段名必须是 file
   formData.append('chat_id', chatId)
-  return api.post<{ message: string; file: TmpFile }, { message: string; file: TmpFile }>(
-    '/files/upload',
-    formData,
-    { timeout: 180_000 },
-  )
+  return apiPost<{ message: string; file: TmpFile }>('/files/upload', formData, {
+    timeout: 180_000,
+  })
 }
 
 /** 列出某聊天的临时文件 — POST /v1/files/list（注意是 POST 不是 GET） */
 export function listTmpFiles(chatId: string) {
-  return api.post<TmpListResponse, TmpListResponse>('/files/list', { chat_id: chatId })
+  return apiPost<TmpListResponse>('/files/list', { chat_id: chatId })
 }
 
 /**
@@ -29,7 +31,7 @@ export function deleteTmpFiles(chatId: string, fileIds: string | string[]) {
   const ids = Array.isArray(fileIds) ? fileIds : [fileIds]
   const payload =
     ids.length === 1 ? { tmp_file_id: ids[0] } : { tmp_file_ids: ids }
-  return api.post<TmpDeleteResponse, TmpDeleteResponse>('/files/delete', {
+  return apiPost<TmpDeleteResponse>('/files/delete', {
     chat_id: chatId,
     ...payload,
   })

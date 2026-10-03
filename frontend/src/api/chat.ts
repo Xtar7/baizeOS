@@ -49,7 +49,10 @@ export async function chatCompletionsStream(
         let message = `请求失败（HTTP ${response.status}）`
         try {
           const data = (await response.json()) as Record<string, unknown>
-          message = (data.error as string) ?? (data.detail as string) ?? message
+          // detail 是给人看的完整原因，error 是给机器看的短码（如 llm_unavailable），
+          // 展示时优先用 detail。
+          message =
+            (data.detail as string) || (data.error as string) || message
         } catch {
           /* 非 JSON 错误体，保留默认信息 */
         }
@@ -66,29 +69,45 @@ export async function chatCompletionsStream(
       const decoder = new TextDecoder()
       let buffer = ''
       let received = false
+      let settled = false // done/error 是否已回调过，保证只收尾一次
 
       const handleEvent = (raw: string) => {
         for (const line of raw.split('\n')) {
           if (!line.startsWith('data: ')) continue
           const data = line.slice(6).trim()
-          if (!data || data === '[DONE]') continue
+          if (!data) continue
+          if (data === '[DONE]') {
+            // 后端补发 done 帧失败时的兜底：流到 [DONE] 就该收尾，
+            // 否则 streaming 标志永远不复位，第二次发消息直接被吞掉。
+            if (!settled) {
+              settled = true
+              callbacks.onDone({ references: [] })
+            }
+            continue
+          }
 
           try {
             const chunk = JSON.parse(data) as Record<string, unknown>
 
             // 流中错误帧
             if (chunk.error) {
-              callbacks.onError(String(chunk.detail ?? chunk.error))
+              if (!settled) {
+                settled = true
+                callbacks.onError(String(chunk.detail ?? chunk.error))
+              }
               return
             }
 
             // 结束帧：携带 usage / references / safety
             if (chunk.done) {
-              callbacks.onDone({
-                usage: chunk.usage as ChatUsage | undefined,
-                references: (chunk.references as never[]) ?? [],
-                safety: chunk.safety as never | undefined,
-              })
+              if (!settled) {
+                settled = true
+                callbacks.onDone({
+                  usage: chunk.usage as ChatUsage | undefined,
+                  references: (chunk.references as never[]) ?? [],
+                  safety: chunk.safety as never | undefined,
+                })
+              }
               continue
             }
 
@@ -124,7 +143,14 @@ export async function chatCompletionsStream(
 
       if (!received) {
         // 流结束但没有任何内容增量，也没有 done 帧 —— 给用户一个明确信号
-        callbacks.onError('模型未返回内容')
+        if (!settled) {
+          settled = true
+          callbacks.onError('模型未返回内容')
+        }
+      } else if (!settled) {
+        // 兜底收尾：连接正常结束但后端没发 done/[DONE]
+        settled = true
+        callbacks.onDone({ references: [] })
       }
     } catch (err) {
       if ((err as Error).name === 'AbortError') {

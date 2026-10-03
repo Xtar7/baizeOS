@@ -14,16 +14,32 @@ from app.services.llms.llama_cpp import LlamaCppLLM
 from app.services.llms.base import BaseLLM
 
 
+class LLMUnavailableError(RuntimeError):
+    """模型目录为空 / 加载失败 —— 上层映射为 HTTP 503，而不是 500。"""
+
+
 class LLMService:
     def __init__(self):
         self.models: Dict[str, Path] = {}
         self.active_model_name: str | None = None
         self.active_llm: BaseLLM | None = None
+        self.load_error: str | None = None
 
         self.system_prompt = self._load_default_prompt()
 
-        self.scan_models()
-        self.select_model(DEFAULT_CHAT_MODEL)
+        # 构造函数绝不能抛 —— 它是模块级单例，一抛就会让所有 import 了本模块的
+        # 蓝图注册失败，整个 Flask 应用起不来。
+        try:
+            self.scan_models()
+        except Exception as e:
+            self.load_error = str(e)
+            print(f"[LLM] 扫描模型失败（服务仍会启动，聊天接口返回 503）: {e}")
+            return
+        try:
+            self.select_model(DEFAULT_CHAT_MODEL)
+        except Exception as e:
+            self.load_error = str(e)
+            print(f"[LLM] 预加载模型失败（服务仍会启动，聊天接口返回 503）: {e}")
 
     # -------------------------------------------------
     # Prompt 管理
@@ -65,44 +81,95 @@ class LLMService:
 
         if not self.models:
             raise RuntimeError("未发现任何有效的生成 GGUF 模型")
-        print("[DEBUG] 扫描到的生成模型列表:", list(self.models.keys()))
-        if self.models:
-            print("[DEBUG] 默认加载模型:", next(iter(self.models.keys())))
-        else:
-            print("[DEBUG] 没有找到任何生成模型！！！")
+        print(f"[LLM] 扫描到的生成模型: {list(self.models.keys())}")
 
     # -------------------------------------------------
     # 模型选择（加类型检查 + fallback）
     # -------------------------------------------------
     def select_model(self, model_name: str | None = None):
-        if model_name == self.active_model_name and self.active_llm:
+        if model_name == self.active_model_name and self.active_llm is not None:
             return
 
         if not model_name or model_name not in self.models:
             # 默认选第一个
             if not self.models:
-                raise RuntimeError("没有可用生成模型")
+                raise LLMUnavailableError("没有可用生成模型")
             model_name = next(iter(self.models.keys()))
             print(f"[LLM] DEFAULT_CHAT_MODEL 无效，使用第一个模型: {model_name}")
 
         path = self.models[model_name]
 
         try:
-            self.active_llm = LlamaCppLLM(path)
-            self.active_model_name = model_name
-            print(f"[LLM] 成功切换到模型: {model_name}")
+            candidate = LlamaCppLLM(path)
         except Exception as e:
-            print(f"[LLM] 加载模型失败 {model_name}: {str(e)}")
-            # fallback 到第一个可用
-            fallback_name = next(iter(self.models.keys()))
-            if fallback_name != model_name:
-                print(f"[LLM] fallback 到 {fallback_name}")
-                self.active_llm = LlamaCppLLM(self.models[fallback_name])
+            candidate = None
+            print(f"[LLM] 加载模型异常 {model_name}: {str(e)}")
+
+        if candidate is not None and candidate.available:
+            self.active_llm = candidate
+            self.active_model_name = model_name
+            self.load_error = None
+            print(f"[LLM] 成功切换到模型: {model_name}")
+            return
+
+        # 首选模型没加载出来 → 依次试其余模型；全失败则保留扫描结果但标记不可用
+        detail = (candidate.load_error if candidate else "") or "unknown"
+        for fallback_name, fallback_path in self.models.items():
+            if fallback_name == model_name:
+                continue
+            print(f"[LLM] fallback 到 {fallback_name}")
+            try:
+                fb = LlamaCppLLM(fallback_path)
+            except Exception as e:
+                print(f"[LLM] fallback {fallback_name} 也失败: {e}")
+                continue
+            if fb.available:
+                self.active_llm = fb
                 self.active_model_name = fallback_name
-            else:
-                raise
-            print("[DEBUG] 当前 active_model_name:", self.active_model_name)
-            print("[DEBUG] 当前模型路径:", self.active_llm.model_path if self.active_llm else "None")
+                self.load_error = None
+                return
+            detail = fb.load_error or detail
+
+        self.active_llm = None
+        self.active_model_name = None
+        self.load_error = detail
+        print(f"[LLM] 没有可用模型，聊天接口将返回 503。原因: {detail}")
+
+    # -------------------------------------------------
+    # 状态
+    # -------------------------------------------------
+    @property
+    def available(self) -> bool:
+        return self.active_llm is not None
+
+    def status(self) -> dict:
+        return {
+            "available": self.available,
+            "active_model": self.active_model_name,
+            "discovered_models": list(self.models.keys()),
+            "loaded_params": getattr(self.active_llm, "loaded_params", None),
+            "error": self.load_error,
+        }
+
+    def ensure_available(self) -> None:
+        """供上层在真正需要生成前调用；未加载时做一次重试。"""
+        if self.active_llm is not None:
+            return
+        if not self.models:
+            try:
+                self.scan_models()
+            except Exception as e:
+                self.load_error = str(e)
+        if self.models:
+            try:
+                self.select_model(DEFAULT_CHAT_MODEL)
+            except Exception as e:
+                self.load_error = str(e)
+        if self.active_llm is None:
+            raise LLMUnavailableError(
+                f"生成模型不可用（{self.load_error or '未知原因'}）。"
+                "请检查 models/llm/*.gguf 是否存在，以及显存/内存是否足够。"
+            )
 
     # -------------------------------------------------
     # Token 统计（加防护）
@@ -167,8 +234,9 @@ class LLMService:
         if model:
             self.select_model(model)
 
+        self.ensure_available()
         if not self.active_llm or not hasattr(self.active_llm, 'llm'):
-            raise RuntimeError("没有加载任何生成模型，请检查模型目录")
+            raise LLMUnavailableError("没有加载任何生成模型，请检查模型目录")
 
         # 加载 prompt（作为 system message）
         system_prompt = self._load_prompt(prompt_name)
@@ -202,9 +270,6 @@ class LLMService:
                     stop=kwargs.get("stop", ["</s>"]),
                     # echo=False,   ← 删除这一行！当前版本不支持
                 )
-
-                # 调试打印（上线可注释）
-                print("[DEBUG] 非流式 output 结构:", output)
 
                 # 兼容不同版本的输出结构
                 choice = output["choices"][0]
