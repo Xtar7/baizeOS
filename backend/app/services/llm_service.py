@@ -87,6 +87,14 @@ class LLMService:
     # 模型选择（加类型检查 + fallback）
     # -------------------------------------------------
     def select_model(self, model_name: str | None = None):
+        # 前端不带具体模型名时传 "default"，它不是 self.models 的 key。
+        # 早退条件要把它归一化，否则每次提问都会重走 fallback 重新加载
+        # 7B 权重，首个 token 被推迟 5~9 秒。
+        if model_name in (None, "", "default"):
+            model_name = self.active_model_name
+        else:
+            model_name = model_name.strip()
+
         if model_name == self.active_model_name and self.active_llm is not None:
             return
 

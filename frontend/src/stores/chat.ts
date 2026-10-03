@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, watch } from 'vue'
+import { reactive, ref, watch } from 'vue'
 import type { StreamHandle } from '@/api/chat'
 import { chatCompletionsStream } from '@/api/chat'
 import * as fileApi from '@/api/file'
@@ -251,12 +251,16 @@ export const useChatStore = defineStore('chat', () => {
       .map((m) => ({ role: m.role, content: m.content }))
     if (!history.length || history[history.length - 1]!.role !== 'user') return
 
-    const placeholder: ChatMsg = {
+    // 必须是 reactive：messages 是 ref([])，push 进去的是响应式代理，
+    // 而回调里闭包持有的是这个原始对象。裸对象上的 `content +=` 不会触发
+    // 依赖收集，界面会永远停在"思考中"。包一层后 push 的是同一个代理，
+    // 改它就等于改组件读的那个对象。
+    const placeholder = reactive<ChatMsg>({
       id: uid(),
       role: 'assistant',
       content: '',
       streaming: true,
-    }
+    })
     messages.value.push(placeholder)
     streaming.value = true
 
