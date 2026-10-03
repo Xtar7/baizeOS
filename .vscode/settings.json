@@ -1,0 +1,27 @@
+{
+    // baizeOS 目录里有 25,002 个 .venv 文件 + 3,855 个 node_modules 文件，
+    // 不排除掉的话 VS Code 的文件监听 + 索引会把这块盘打满，
+    // 再叠加 Defender 实时扫描，表现就是"打开 VS Code 什么都不干就整机卡死"。
+    "files.watcherExclude": {
+        "**/.venv/**": true,
+        "**/venv/**": true,
+        "**/node_modules/**": true,
+        "**/__pycache__/**": true,
+        "**/models/**": true,
+        "**/.git/lfs/**": true,
+        "**/dist/**": true
+    },
+    "search.exclude": {
+        "**/.venv": true,
+        "**/venv": true,
+        "**/node_modules": true,
+        "**/__pycache__": true,
+        "**/models": true,
+        "**/.git": true,
+        "**/dist": true
+    },
+    "files.exclude": {
+        "**/.venv": true,
+        "**/__pycache__": true
+    }
+}
